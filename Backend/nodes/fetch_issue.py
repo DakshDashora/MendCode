@@ -6,6 +6,7 @@ def fetch_issue_node(state: IssueState) -> IssueState:
     client = GitHubClient(
         owner=state.repo_owner,
         repo=state.repo_name,
+        token=state.github_token
     )
 
     issue = client.get_issue(state.issue_number)

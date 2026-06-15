@@ -18,20 +18,20 @@ def add_remote(repo_path: str, remote_name: str, url: str):
     """
     try:
         subprocess.run(
-            ["git", "-C", repo_path, "remote", "add", remote_name, url],
+            ["git", "-C", repo_path, "remote", "add", "--", remote_name, url],
             check=True,
             capture_output=True,
         )
     except subprocess.CalledProcessError:
         subprocess.run(
-            ["git", "-C", repo_path, "remote", "set-url", remote_name, url],
+            ["git", "-C", repo_path, "remote", "set-url", "--", remote_name, url],
             check=True,
         )
 
 
 def commit_changes(repo_path: str, message: str):
     """
-    Stages all changes and creates a commit.
+    Stages all changes and creates a commit securely to prevent argument injection.
     """
     # Ensure git user is configured (required for commit)
     subprocess.run(
@@ -44,20 +44,29 @@ def commit_changes(repo_path: str, message: str):
     )
     
     subprocess.run(
-        ["git", "-C", repo_path, "add", "."],
+        ["git", "-C", repo_path, "add", "--", "."],
         check=True,
     )
     subprocess.run(
-        ["git", "-C", repo_path, "commit", "-m", message],
+        ["git", "-C", repo_path, "commit", "-F", "-"],
+        input=message.encode('utf-8'),
         check=True,
     )
 
 
-def push_branch(repo_path: str, branch_name: str, remote_name: str = "origin"):
+def push_branch(repo_path: str, branch_name: str, remote_name: str = "origin", token: str | None = None):
     """
-    Pushes the branch to the specified remote.
+    Pushes the branch to the specified remote securely.
     """
+    cmd = ["git", "-C", repo_path]
+    if token:
+        import base64
+        auth_bytes = f"x-access-token:{token}".encode("utf-8")
+        auth_base64 = base64.b64encode(auth_bytes).decode("utf-8")
+        cmd.extend(["-c", f"http.extraHeader=Authorization: Basic {auth_base64}"])
+    cmd.extend(["push", remote_name, "--", branch_name])
+    
     subprocess.run(
-        ["git", "-C", repo_path, "push", remote_name, branch_name],
+        cmd,
         check=True,
     )

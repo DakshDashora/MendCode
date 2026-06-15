@@ -9,3 +9,10 @@ node_modules/
 PROJECT_CONTEXT.md
 
 uv.lock
+
+*.db
+
+workspace
+workspace/
+*.db-shm
+*.db-wal

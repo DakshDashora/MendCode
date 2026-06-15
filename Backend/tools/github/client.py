@@ -19,12 +19,13 @@ class GitHubClient:
         self.repo = repo
         self.token = token or os.getenv("GITHUB_TOKEN")
 
+        if not self.token:
+            raise ValueError("GitHub token must be provided either as an argument or in the GITHUB_TOKEN environment variable.")
+
         self.headers = {
             "Accept": "application/vnd.github+json",
+            "Authorization": f"Bearer {self.token}",
         }
-
-        if self.token:
-            self.headers["Authorization"] = f"Bearer {self.token}"
 
     def _get(self, endpoint: str) -> Dict[str, Any]:
         url = f"{self.BASE_URL}{endpoint}"

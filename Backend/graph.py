@@ -1,4 +1,6 @@
+import sqlite3
 from langgraph.graph import StateGraph, END
+from langgraph.checkpoint.sqlite import SqliteSaver
 from schemas.state import IssueState
 from nodes.fetch_issue import fetch_issue_node
 from nodes.analyze_issue import analyze_issue_node
@@ -133,4 +135,8 @@ def create_graph():
     workflow.add_edge("apply_file_change", "create_pr")
     workflow.add_edge("create_pr", END)
 
-    return workflow.compile()
+    # Use a persistent SQLite database for checkpoints
+    conn = sqlite3.connect("checkpoints.db", check_same_thread=False)
+    memory = SqliteSaver(conn)
+
+    return workflow.compile(checkpointer=memory, interrupt_before=["apply_file_change"])

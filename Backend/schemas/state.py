@@ -8,6 +8,7 @@ class IssueState(BaseModel):
     repo_name: str
     issue_number: int
     llm_provider: str = "gemini"
+    github_token: Optional[str] = None
 
     # Raw GitHub Issue Data
     issue_title: Optional[str] = None
@@ -79,6 +80,7 @@ class IssueState(BaseModel):
     # Pull Request
     pr_title: Optional[str] = None
     pr_body: Optional[str] = None
+    pr_url: Optional[str] = None
 
     # Execution Metadata
     current_step: Optional[str] = None
@@ -124,3 +126,5 @@ class IssueState(BaseModel):
     )
 
     validation_retry_count: int = 0
+
+    user_approved: bool = False

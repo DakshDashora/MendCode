@@ -16,6 +16,7 @@ def apply_file_change_node(
     for change in state.approved_changes:
         print(f"Applying change to: {change['file_path']}")
         write_file(
+            state.local_repo_path,
             change["file_path"],
             change["updated_content"],
         )

@@ -1,0 +1,14 @@
+langchain-google-genai
+pydantic
+requests
+python-dotenv
+langchain-groq
+langgraph
+langgraph-checkpoint-sqlite
+sqlalchemy
+passlib
+bcrypt==3.2.0
+python-jose
+fastapi
+uvicorn
+python-multipart

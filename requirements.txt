@@ -1,6 +1,0 @@
-langchain-google-genai
-pydantic
-requests
-python-dotenv
-langchain-groq
-langgraph

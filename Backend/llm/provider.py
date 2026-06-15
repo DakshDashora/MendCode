@@ -12,8 +12,8 @@ def get_llm(provider: str = "gemini"):
     if provider.lower() == "groq":
         return ChatGroq(
             # model = "meta-llama/llama-4-scout-17b-16e-instruct",
-            # model = "llama-3.3-70b-versatile",
-            model="openai/gpt-oss-120b",
+            model = "llama-3.3-70b-versatile",
+            # model="openai/gpt-oss-120b",
             temperature=0,
         )
     elif provider.lower() == "gemini":
