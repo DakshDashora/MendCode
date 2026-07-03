@@ -21,6 +21,7 @@ router = APIRouter(prefix="/auth", tags=["Authentication"])
 
 GITHUB_CLIENT_ID = os.getenv("GITHUB_CLIENT_ID")
 GITHUB_CLIENT_SECRET = os.getenv("GITHUB_CLIENT_SECRET")
+GITHUB_REDIRECT_URI = os.getenv("GITHUB_REDIRECT_URI")
 
 @router.post("/register", response_model=UserResponse)
 def register(user_data: UserCreate, db: Session = Depends(get_db)):
@@ -48,18 +49,43 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     access_token = create_access_token(data={"id": user.id, "sub": user.username, "role": user.role})
     return {"access_token": access_token, "token_type": "bearer"}
 
+@router.get("/me", response_model=UserResponse)
+def get_me(current_user: User = Depends(get_current_user)):
+    return {
+        "id": current_user.id,
+        "username": current_user.username,
+        "role": current_user.role,
+        "github_token": "CONNECTED" if current_user.github_token else None,
+        "created_at": current_user.created_at
+    }
+
 @router.get("/users", response_model=List[UserResponse])
 def list_users(current_user: User = Depends(get_current_admin), db: Session = Depends(get_db)):
     """Admin only: List all users in the system."""
-    return db.query(User).all()
+    users = db.query(User).all()
+    return [
+        {
+            "id": u.id,
+            "username": u.username,
+            "role": u.role,
+            "github_token": "CONNECTED" if u.github_token else None,
+            "created_at": u.created_at
+        }
+        for u in users
+    ]
+
 
 @router.get("/github/login")
 def github_login():
     if not GITHUB_CLIENT_ID:
         raise HTTPException(status_code=500, detail="GitHub Client ID not configured")
     
+    url = f"https://github.com/login/oauth/authorize?client_id={GITHUB_CLIENT_ID}&scope=repo,user"
+    if GITHUB_REDIRECT_URI:
+        url += f"&redirect_uri={GITHUB_REDIRECT_URI}"
+        
     return {
-        "url": f"https://github.com/login/oauth/authorize?client_id={GITHUB_CLIENT_ID}&scope=repo,user"
+        "url": url
     }
 
 @router.get("/github/callback")
@@ -67,14 +93,18 @@ async def github_callback(code: str, current_user: User = Depends(get_current_us
     if not GITHUB_CLIENT_ID or not GITHUB_CLIENT_SECRET:
         raise HTTPException(status_code=500, detail="GitHub OAuth not configured")
 
+    params = {
+        "client_id": GITHUB_CLIENT_ID,
+        "client_secret": GITHUB_CLIENT_SECRET,
+        "code": code,
+    }
+    if GITHUB_REDIRECT_URI:
+        params["redirect_uri"] = GITHUB_REDIRECT_URI
+
     async with httpx.AsyncClient() as client:
         response = await client.post(
             "https://github.com/login/oauth/access_token",
-            params={
-                "client_id": GITHUB_CLIENT_ID,
-                "client_secret": GITHUB_CLIENT_SECRET,
-                "code": code,
-            },
+            params=params,
             headers={"Accept": "application/json"},
         )
         data = response.json()
@@ -87,3 +117,10 @@ async def github_callback(code: str, current_user: User = Depends(get_current_us
     db.commit()
     
     return {"message": "GitHub account connected successfully"}
+
+@router.post("/github/disconnect")
+def github_disconnect(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    current_user.github_token = None
+    db.commit()
+    return {"message": "GitHub account disconnected successfully"}
+

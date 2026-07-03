@@ -89,6 +89,10 @@ class IssueState(BaseModel):
         default_factory=list
     )
 
+    console_logs: List[str] = Field(
+        default_factory=list
+    )
+
     modification_summary: str | None = None
 
     modification_targets: List[dict] = Field(

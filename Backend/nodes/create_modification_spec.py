@@ -9,6 +9,7 @@ from schemas.modification_spec import (
 def create_modification_spec_node(
     state: IssueState,
 ) -> IssueState:
+    state.console_logs.append("[INFO] Designing modification specification and mapping surgical objectives...")
     llm = get_llm(state.llm_provider)
     structured_llm = llm.with_structured_output(
         ModificationSpec
@@ -79,5 +80,6 @@ Return a summary of the surgical plan and the specific targets using their ABSOL
     state.current_step = (
         "modification_spec_created"
     )
+    state.console_logs.append(f"[SUCCESS] Modification specs created. Planned edits for {len(state.modification_targets)} file(s).")
 
     return state

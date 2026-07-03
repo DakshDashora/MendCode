@@ -6,6 +6,7 @@ from llm.provider import get_llm
 def analyze_issue_node(
     state: IssueState,
 ) -> IssueState:
+    state.console_logs.append("[INFO] Analyzing issue context and establishing acceptance criteria...")
     llm = get_llm(state.llm_provider)
     structured_llm = llm.with_structured_output(
         IssueAnalysis
@@ -56,5 +57,6 @@ Issue Description:
     )
 
     state.current_step = "issue_analyzed"
+    state.console_logs.append(f"[SUCCESS] Issue analysis complete. Isolated {len(state.acceptance_criteria)} acceptance criteria and {len(state.suspected_components)} suspected modules.")
 
     return state

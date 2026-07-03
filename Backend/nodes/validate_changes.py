@@ -1,4 +1,5 @@
 import ast
+from pathlib import Path
 from pydantic import BaseModel, Field
 from typing import List
 from llm.provider import get_llm
@@ -9,6 +10,7 @@ class ValidationResult(BaseModel):
     reasons: List[str] = Field(default_factory=list)
 
 def validate_changes_node(state: IssueState) -> IssueState:
+    state.console_logs.append("[INFO] Initiating AST syntax checking and compilation validations...")
     print("\n=== VALIDATING CHANGES ===")
     
     # 1. Syntax Check (In-memory)
@@ -17,8 +19,10 @@ def validate_changes_node(state: IssueState) -> IssueState:
             try:
                 ast.parse(change["updated_content"])
                 print(f"Syntax Check Passed: {change['file_path']}")
+                state.console_logs.append(f"[INFO] AST syntax validation passed for {Path(change['file_path']).name}")
             except SyntaxError as e:
                 print(f"Syntax Check Failed: {change['file_path']} - {str(e)}")
+                state.console_logs.append(f"[ERROR] AST syntax validation failed for {Path(change['file_path']).name}: {str(e)}")
                 state.validation_passed = False
                 state.validation_feedback = [f"Syntax Error in {change['file_path']}: {str(e)}"]
                 return state
@@ -72,5 +76,9 @@ Return a boolean 'passed' and a list of 'reasons' for your decision.
     state.validation_passed = result.passed
     state.validation_feedback = result.reasons
     state.current_step = "changes_validated"
+    if result.passed:
+        state.console_logs.append("[SUCCESS] Code validation checks completed successfully. All targets compile.")
+    else:
+        state.console_logs.append(f"[ERROR] Validation checks failed: {', '.join(result.reasons)}")
 
     return state
