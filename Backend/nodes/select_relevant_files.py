@@ -15,6 +15,7 @@ from tools.repository.tree import (
 def select_relevant_files_node(
     state: IssueState,
 ) -> IssueState:
+    state.console_logs.append("[INFO] Inspecting repository tree structure to identify files of interest...")
     llm = get_llm(state.llm_provider)
     structured_llm = llm.with_structured_output(
         FileSelection
@@ -98,5 +99,6 @@ reading to investigate the issue.
     state.current_step = (
         "files_selected"
     )
+    state.console_logs.append(f"[SUCCESS] Identified target code files: {', '.join([Path(f).name for f in state.selected_files])}")
 
     return state

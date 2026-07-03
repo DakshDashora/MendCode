@@ -33,6 +33,7 @@ class Job(Base):
     pr_url = Column(String, nullable=True)
     approved_changes = Column(Text, nullable=True)  # JSON string of changes
     error_message = Column(Text, nullable=True)
+    console_logs = Column(Text, nullable=True)  # JSON string of logs
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

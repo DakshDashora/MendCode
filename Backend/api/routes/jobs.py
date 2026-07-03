@@ -58,6 +58,7 @@ def run_agent_job(job_id: str, github_token: str, payload: JobCreate = None, res
         job.root_cause_analysis = final_state.get("root_cause_analysis")
         job.pr_url = final_state.get("pr_url")
         job.approved_changes = json.dumps(final_state.get("approved_changes", []))
+        job.console_logs = json.dumps(final_state.get("console_logs", []))
         db.commit()
     except Exception as e:
         job = db.query(Job).filter(Job.id == job_id).first()
@@ -78,6 +79,13 @@ def format_job_response(job: Job) -> dict:
             job_dict["approved_changes"] = []
     else:
         job_dict["approved_changes"] = []
+    if job.console_logs:
+        try:
+            job_dict["console_logs"] = json.loads(job.console_logs)
+        except (json.JSONDecodeError, TypeError):
+            job_dict["console_logs"] = []
+    else:
+        job_dict["console_logs"] = []
     return job_dict
 
 @router.post("/", response_model=JobResponse)

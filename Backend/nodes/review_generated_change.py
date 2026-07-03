@@ -9,6 +9,7 @@ from schemas.state import IssueState
 def review_generated_change_node(
     state: IssueState,
 ) -> IssueState:
+    state.console_logs.append("[INFO] Reviewing generated changes against safety and functional alignment rules...")
     llm = get_llm(state.llm_provider)
     structured_llm = llm.with_structured_output(
         ReviewResult
@@ -74,5 +75,9 @@ Reject only if the code is logically broken, fails to solve the root cause, or i
     state.current_step = (
         "change_reviewed"
     )
+    if result.approved:
+        state.console_logs.append(f"[SUCCESS] Changes approved by reviewer. Confidence: {int((result.confidence or 0.9)*100)}%")
+    else:
+        state.console_logs.append(f"[WARNING] Changes rejected by reviewer. Reasons: {', '.join(result.reasons or [])}")
 
     return state

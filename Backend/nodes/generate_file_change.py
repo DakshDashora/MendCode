@@ -1,3 +1,4 @@
+from pathlib import Path
 from llm.provider import get_llm
 
 from schemas.state import IssueState
@@ -15,6 +16,7 @@ def generate_file_change_node(
     target = state.modification_targets[state.current_target_index]
 
     file_path = target["file_path"]
+    state.console_logs.append(f"[INFO] Generating surgical code edits for: {Path(file_path).name} (Attempt {state.retry_count + 1})...")
 
     objective = target["objective"]
 
@@ -72,5 +74,6 @@ EXISTING FILE CONTENT:
     state.current_step = (
         "change_generated"
     )
+    state.console_logs.append(f"[SUCCESS] Code changes generated for {Path(file_path).name}.")
 
     return state

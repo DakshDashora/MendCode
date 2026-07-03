@@ -41,6 +41,7 @@ class JobResponse(JobBase):
     pr_url: Optional[str] = None
     approved_changes: Optional[List[dict]] = None
     error_message: Optional[str] = None
+    console_logs: Optional[List[str]] = None
     created_at: datetime
     updated_at: datetime
 

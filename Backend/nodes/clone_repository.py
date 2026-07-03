@@ -8,7 +8,7 @@ def clone_repository_node(
     state: IssueState,
     config: RunnableConfig,
 ) -> IssueState:
-
+    state.console_logs.append(f"[INFO] Cloning repository '{state.repo_owner}/{state.repo_name}' to local workspace...")
     job_id = config.get("configurable", {}).get("thread_id", str(uuid.uuid4()))
 
     repo_path = clone_repository(
@@ -21,5 +21,6 @@ def clone_repository_node(
     state.local_repo_path = repo_path
 
     state.current_step = "repository_cloned"
+    state.console_logs.append(f"[SUCCESS] Repository cloned successfully to workspace path.")
 
     return state

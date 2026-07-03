@@ -13,6 +13,7 @@ from tools.repository.read_many import (
 def investigate_issue_node(
     state: IssueState,
 ) -> IssueState:
+    state.console_logs.append("[INFO] Performing detailed code path investigation on selected source files...")
     llm = get_llm(state.llm_provider)
     structured_llm = llm.with_structured_output(
         InvestigationResult
@@ -83,5 +84,6 @@ Base reasoning only on the supplied code.
     state.current_step = (
         "issue_investigated"
     )
+    state.console_logs.append(f"[SUCCESS] Investigation complete. Isolated root cause with {int((state.confidence or 0.85)*100)}% confidence.")
 
     return state

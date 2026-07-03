@@ -8,6 +8,7 @@ import time
 from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 def create_pr_node(state: IssueState) -> IssueState:
+    state.console_logs.append("[INFO] Committing changes, pushing branch to GitHub, and opening pull request...")
     print("\n=== CREATING PULL REQUEST (FORKING WORKFLOW) ===")
 
     llm = get_llm(state.llm_provider)
@@ -109,8 +110,10 @@ BODY: <body>
         pr_url = pr_result.get('html_url')
         print(f"PR Created Successfully: {pr_url}")
         state.pr_url = pr_url
+        state.console_logs.append(f"[SUCCESS] Pull request opened successfully on GitHub: {pr_url}")
     except Exception as e:
         print(f"Error creating PR after retries: {e}")
+        state.console_logs.append(f"[ERROR] Failed to compile Pull Request: {str(e)}")
 
     state.pr_title = pr_title
     state.pr_body = pr_body
