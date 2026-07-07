@@ -31,6 +31,51 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, token, onBack, onRefr
   const [showSuccessModal, setShowSuccessModal] = useState(false);
   const consoleEndRef = useRef<HTMLDivElement>(null);
 
+  // Editing state for proposed modifications
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editText, setEditText] = useState<string>('');
+  const [savingEdit, setSavingEdit] = useState<boolean>(false);
+
+  const handleStartEdit = (index: number, content: string) => {
+    setEditingIndex(index);
+    setEditText(content);
+  };
+
+  const handleCancelEdit = () => {
+    setEditingIndex(null);
+    setEditText('');
+  };
+
+  const handleSaveEdit = async (filePath: string) => {
+    setSavingEdit(true);
+    try {
+      const response = await fetch(`${API_BASE_URL}/jobs/${job.id}/changes`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          file_path: filePath,
+          updated_content: editText,
+        }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.detail || 'Failed to save changes.');
+      }
+
+      onRefresh();
+      setEditingIndex(null);
+      setEditText('');
+    } catch (err: any) {
+      alert(err.message || 'Error saving changes');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
   const handleApprove = async () => {
     setApproving(true);
     setError(null);
@@ -317,15 +362,72 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, token, onBack, onRefr
                   const original = change.original_content || '';
                   const updated = change.updated_content || '';
                   const diffLines = computeLineDiff(original, updated);
+                  const isEditingThis = editingIndex === index;
 
                   return (
                     <div key={index} className="change-card">
-                      <div className="change-header">
-                        <span className="change-filepath">{formatFilePath(change.file_path)}</span>
-                        <span className="change-objective">{change.objective}</span>
+                      <div className="change-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                        <div>
+                          <span className="change-filepath">{formatFilePath(change.file_path)}</span>
+                          <span className="change-objective" style={{ marginLeft: '12px', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                            {change.objective}
+                          </span>
+                        </div>
+                        {job.status === 'AWAITING_APPROVAL' && (
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            {isEditingThis ? (
+                              <>
+                                <button 
+                                  onClick={() => handleSaveEdit(change.file_path)} 
+                                  className="btn btn-primary" 
+                                  disabled={savingEdit}
+                                  style={{ padding: '4px 10px', fontSize: '0.72rem' }}
+                                >
+                                  {savingEdit ? 'Saving...' : 'Save'}
+                                </button>
+                                <button 
+                                  onClick={handleCancelEdit} 
+                                  className="btn btn-secondary"
+                                  style={{ padding: '4px 10px', fontSize: '0.72rem' }}
+                                >
+                                  Cancel
+                                </button>
+                              </>
+                            ) : (
+                              <button 
+                                onClick={() => handleStartEdit(index, change.updated_content || '')} 
+                                className="btn btn-secondary"
+                                style={{ padding: '4px 10px', fontSize: '0.72rem' }}
+                              >
+                                Edit Code
+                              </button>
+                            )}
+                          </div>
+                        )}
                       </div>
+                      
                       <div className="diff-content">
-                        {diffLines.length === 0 ? (
+                        {isEditingThis ? (
+                          <div style={{ padding: '12px 16px', backgroundColor: 'var(--bg-app)' }}>
+                            <textarea
+                              value={editText}
+                              onChange={(e) => setEditText(e.target.value)}
+                              rows={15}
+                              style={{
+                                width: '100%',
+                                fontFamily: 'var(--font-mono)',
+                                fontSize: '0.8rem',
+                                padding: '12px',
+                                border: '1px solid var(--border)',
+                                borderRadius: 'var(--radius)',
+                                backgroundColor: 'var(--input-bg)',
+                                color: 'var(--text-primary)',
+                                resize: 'vertical',
+                                outline: 'none'
+                              }}
+                            />
+                          </div>
+                        ) : diffLines.length === 0 ? (
                           <div style={{ padding: '16px 20px', fontStyle: 'italic', color: 'var(--text-muted)' }}>
                             No changes made to this file.
                           </div>

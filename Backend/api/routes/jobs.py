@@ -5,7 +5,7 @@ import json
 
 from api.dbconfig import get_db, SessionLocal
 from api.models import Job, User
-from api.schemas import JobCreate, JobResponse
+from api.schemas import JobCreate, JobResponse, ChangeUpdateRequest
 from api.auth_utils import get_current_user, decrypt_token
 from graph import create_graph
 from schemas.state import IssueState
@@ -133,3 +133,49 @@ async def list_jobs(skip: int = 0, limit: int = 10, current_user: User = Depends
         jobs = db.query(Job).filter(Job.user_id == current_user.id).offset(skip).limit(limit).all()
     
     return [format_job_response(job) for job in jobs]
+
+@router.put("/{job_id}/changes", response_model=JobResponse)
+async def update_job_changes(
+    job_id: str,
+    payload: ChangeUpdateRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    job = db.query(Job).filter(Job.id == job_id, Job.user_id == current_user.id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+        
+    if not job.approved_changes:
+        raise HTTPException(status_code=400, detail="No approved changes exist yet to edit.")
+
+    try:
+        changes = json.loads(job.approved_changes)
+    except (json.JSONDecodeError, TypeError):
+        changes = []
+
+    # Find the target file and update it
+    found = False
+    for change in changes:
+        if change["file_path"] == payload.file_path:
+            change["updated_content"] = payload.updated_content
+            found = True
+            break
+
+    if not found:
+        raise HTTPException(status_code=404, detail=f"File path '{payload.file_path}' not found in approved changes.")
+
+    # Save to db
+    job.approved_changes = json.dumps(changes)
+    db.commit()
+    db.refresh(job)
+
+    # Sync with LangGraph checkpoint database (checkpoints.db)
+    try:
+        app = create_graph()
+        config = {"configurable": {"thread_id": job_id}}
+        app.update_state(config, {"approved_changes": changes})
+    except Exception as e:
+        # If checkpoint database is empty or not yet initialized for this thread, ignore
+        pass
+
+    return format_job_response(job)
