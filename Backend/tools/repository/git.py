@@ -35,11 +35,11 @@ def commit_changes(repo_path: str, message: str):
     """
     # Ensure git user is configured (required for commit)
     subprocess.run(
-        ["git", "-C", repo_path, "config", "user.email", "pr-assistant@example.com"],
+        ["git", "-C", repo_path, "config", "user.email", "mendcode@example.com"],
         check=True,
     )
     subprocess.run(
-        ["git", "-C", repo_path, "config", "user.name", "PR Assistant"],
+        ["git", "-C", repo_path, "config", "user.name", "MendCode"],
         check=True,
     )
     

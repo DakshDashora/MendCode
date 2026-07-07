@@ -234,7 +234,7 @@ h1, h2, h3, h4 {
   width: 32px;
   height: 32px;
   border-radius: var(--radius);
-  background-color: var(--text-primary);
+  background-color: transparent;
   display: flex;
   align-items: center;
   justify-content: center;

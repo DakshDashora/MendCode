@@ -9,8 +9,8 @@ from api.routes.auth import router as authrouter
 Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
-    title="PR Assistant API",
-    description="A modular API for automating PR generation using LangGraph",
+    title="MendCode API",
+    description="A modular API for automating code patches and validation using LangGraph",
     version="1.0.0"
 )
 
@@ -29,9 +29,9 @@ def custom_openapi():
         return app.openapi_schema
 
     openapi_schema = get_openapi(
-        title="PR Assistant API",
+        title="MendCode API",
         version="1.0.0",
-        description="A modular API for automating PR generation using LangGraph",
+        description="A modular API for automating code patches and validation using LangGraph",
         routes=app.routes,
     )
 

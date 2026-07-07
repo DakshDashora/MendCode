@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Sun, Moon, LogOut, Github, Terminal, Shield, Calendar, AlertTriangle } from 'lucide-react';
+import { Sun, Moon, LogOut, Github, Shield, Calendar, AlertTriangle } from 'lucide-react';
 import type { User } from '../types';
 import { API_BASE_URL } from '../config';
 
@@ -87,9 +87,9 @@ export const Navbar: React.FC<NavbarProps> = ({
     <nav className="navbar">
       <div className="nav-brand" onClick={() => navigate(user ? '/dashboard' : '/')}>
         <div className="nav-logo-icon">
-          <Terminal size={18} />
+          <img src="/favicon.png" alt="MendCode Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
         </div>
-        <span className="nav-title">PR Assistant</span>
+        <span className="nav-title">MendCode</span>
       </div>
 
       <div className="nav-actions">
