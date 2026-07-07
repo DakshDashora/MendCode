@@ -30,12 +30,28 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [activeTab, setActiveTab] = useState<'history' | 'solve'>('history');
   
   // Solve New Issue Form State
+  const [issueUrl, setIssueUrl] = useState('');
   const [repoOwner, setRepoOwner] = useState('');
   const [repoName, setRepoName] = useState('');
   const [issueNumber, setIssueNumber] = useState<number | ''>('');
-  const [llmProvider, setLlmProvider] = useState('gemini');
+  const [llmProvider, setLlmProvider] = useState('groq');
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  const handleUrlChange = (val: string) => {
+    setIssueUrl(val);
+    if (!val) return;
+    try {
+      const match = val.match(/github\.com\/([^/]+)\/([^/]+)\/issues\/(\d+)/i);
+      if (match) {
+        setRepoOwner(match[1]);
+        setRepoName(match[2]);
+        setIssueNumber(parseInt(match[3], 10));
+      }
+    } catch (e) {
+      // ignore
+    }
+  };
 
   const handleGithubConnect = async () => {
     try {
@@ -249,6 +265,21 @@ export const Dashboard: React.FC<DashboardProps> = ({
                 </div>
               )}
 
+              <div className="form-group" style={{ marginBottom: '20px', borderBottom: '1px solid var(--border)', paddingBottom: '16px' }}>
+                <label className="form-label" htmlFor="solve-issue-url">
+                  Paste GitHub Issue URL (Autofill)
+                </label>
+                <input
+                  id="solve-issue-url"
+                  type="text"
+                  className="form-input"
+                  placeholder="https://github.com/owner/repo/issues/123"
+                  value={issueUrl}
+                  onChange={(e) => handleUrlChange(e.target.value)}
+                  disabled={submitting}
+                />
+              </div>
+
               <div className="form-group">
                 <label className="form-label" htmlFor="solve-repo-owner">
                   Repository Owner *
@@ -257,7 +288,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   id="solve-repo-owner"
                   type="text"
                   className="form-input"
-                  placeholder="e.g. DakshDashora"
+                  placeholder="Enter repository owner"
                   value={repoOwner}
                   onChange={(e) => setRepoOwner(e.target.value)}
                   required
@@ -273,7 +304,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   id="solve-repo-name"
                   type="text"
                   className="form-input"
-                  placeholder="e.g. RedGold"
+                  placeholder="Enter repository name"
                   value={repoName}
                   onChange={(e) => setRepoName(e.target.value)}
                   required
@@ -290,7 +321,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   type="number"
                   min="1"
                   className="form-input"
-                  placeholder="e.g. 1"
+                  placeholder="Enter issue number"
                   value={issueNumber}
                   onChange={(e) => setIssueNumber(e.target.value === '' ? '' : Number(e.target.value))}
                   required
@@ -309,7 +340,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
                   onChange={(e) => setLlmProvider(e.target.value)}
                   disabled={submitting}
                 >
-                  <option value="gemini">Gemini 2.0 Flash (Recommended)</option>
                   <option value="groq">Groq (Llama 3.3 70B)</option>
                 </select>
               </div>

@@ -136,7 +136,12 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, token, onBack, onRefr
     const marker = 'workspace/repos/';
     const index = path.indexOf(marker);
     if (index !== -1) {
-      return path.substring(index + marker.length);
+      const relative = path.substring(index + marker.length);
+      const parts = relative.split('/');
+      if (parts.length > 2) {
+        return parts.slice(2).join('/');
+      }
+      return relative;
     }
     return path;
   };
