@@ -6,11 +6,11 @@ export const Footer: React.FC = () => {
     <footer className="footer">
       <div className="footer-content">
         <div>
-          <span>&copy; {new Date().getFullYear()} PR Assistant. Powered by Google Gemini.</span>
+          <span>&copy; {new Date().getFullYear()} MendCode. Powered by AI.</span>
         </div>
         <div className="footer-links">
           <a 
-            href="https://github.com/DakshDashora/pr-assisstant" 
+            href="https://github.com/DakshDashora/MendCode" 
             target="_blank" 
             rel="noopener noreferrer" 
             className="footer-link"
@@ -18,8 +18,22 @@ export const Footer: React.FC = () => {
           >
             <Github size={14} /> Repository
           </a>
-          <a href="#" className="footer-link">Documentation</a>
-          <a href="#" className="footer-link">Support</a>
+          <a 
+            href="https://github.com/DakshDashora/MendCode#readme" 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            className="footer-link"
+          >
+            Documentation
+          </a>
+          <a 
+            href="https://github.com/DakshDashora/MendCode/issues" 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            className="footer-link"
+          >
+            Support
+          </a>
         </div>
       </div>
     </footer>

@@ -1,4 +1,8 @@
+import os
 import sqlite3
+from dotenv import load_dotenv
+load_dotenv()
+
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.sqlite import SqliteSaver
 from schemas.state import IssueState
@@ -135,8 +139,24 @@ def create_graph():
     workflow.add_edge("apply_file_change", "create_pr")
     workflow.add_edge("create_pr", END)
 
-    # Use a persistent SQLite database for checkpoints
-    conn = sqlite3.connect("checkpoints.db", check_same_thread=False)
-    memory = SqliteSaver(conn)
+    # Choose checkpointer based on database configuration
+    db_url = os.getenv("DATABASE_URL", "sqlite:///./jobs.db")
+    if db_url.startswith("sqlite"):
+        conn = sqlite3.connect("checkpoints.db", check_same_thread=False)
+        checkpointer = SqliteSaver(conn)
+    else:
+        # PostgreSQL dynamic setup
+        pg_url = db_url
+        if pg_url.startswith("postgres://"):
+            pg_url = pg_url.replace("postgres://", "postgresql://", 1)
+        
+        import psycopg
+        from langgraph.checkpoint.postgres import PostgresSaver
+        
+        conn = psycopg.connect(pg_url)
+        conn.autocommit = True
+        checkpointer = PostgresSaver(conn)
+        # Initialize tables
+        checkpointer.setup()
 
-    return workflow.compile(checkpointer=memory, interrupt_before=["apply_file_change"])
+    return workflow.compile(checkpointer=checkpointer, interrupt_before=["apply_file_change"])

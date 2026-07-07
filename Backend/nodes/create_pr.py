@@ -82,7 +82,13 @@ BODY: <body>
         head_ref = f"{user_login}:{branch_name}"
 
     # 4. Open Pull Request
-    print(f"Opening Pull Request: {head_ref} -> {state.repo_owner}:main")
+    try:
+        repo_info = client.get_repository()
+        default_branch = repo_info.get("default_branch", "main")
+    except Exception:
+        default_branch = "main"
+
+    print(f"Opening Pull Request: {head_ref} -> {state.repo_owner}:{default_branch}")
     
     @retry(
         stop=stop_after_attempt(5),
@@ -95,7 +101,7 @@ BODY: <body>
                 title=pr_title,
                 body=pr_body,
                 head=head_ref,
-                base="main"
+                base=default_branch
             )
         except Exception as e:
             if "fork" in str(e).lower() or "No commits between" in str(e):

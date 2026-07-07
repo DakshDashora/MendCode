@@ -1,6 +1,6 @@
-# PR Assistant 🚀
+# MendCode 🚀
 
-PR Assistant is an autonomous, AI-powered developer portal that fetches GitHub issues, analyzes acceptance criteria, investigates codebase root causes, drafts code modifications, validates edits, and opens pull requests automatically. 
+MendCode is an autonomous, AI-powered developer portal that fetches GitHub issues, analyzes acceptance criteria, investigates codebase root causes, drafts code modifications, validates edits, and opens pull requests automatically. 
 
 It features a high-contrast, developer-first layout inspired by GitHub's aesthetics, complete with light/dark modes, a rolling real-time console log stream, progress visualization, and interactive diff viewers.
 

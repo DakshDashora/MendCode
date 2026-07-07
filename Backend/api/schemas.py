@@ -47,3 +47,7 @@ class JobResponse(JobBase):
 
     class Config:
         from_attributes = True
+
+class ChangeUpdateRequest(BaseModel):
+    file_path: str
+    updated_content: str

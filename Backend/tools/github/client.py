@@ -103,7 +103,9 @@ class GitHubClient:
             f"/repos/{self.owner}/{self.repo}/pulls",
             data=data,
         )
-    
 
-
-    
+    def get_repository(self) -> Dict[str, Any]:
+        """
+        Retrieves the details of the repository.
+        """
+        return self._get(f"/repos/{self.owner}/{self.repo}")

@@ -5,6 +5,10 @@ python-dotenv
 langchain-groq
 langgraph
 langgraph-checkpoint-sqlite
+langgraph-checkpoint-postgres
+psycopg2-binary
+psycopg[binary]
+psycopg-pool
 sqlalchemy
 passlib
 bcrypt==3.2.0
