@@ -6,6 +6,9 @@ import { AuthModal } from './components/AuthModal';
 import { Dashboard } from './components/Dashboard';
 import { JobDetail } from './components/JobDetail';
 import { Footer } from './components/Footer';
+import { TermsPage } from './components/TermsPage';
+import { PrivacyPage } from './components/PrivacyPage';
+import { SecurityPage } from './components/SecurityPage';
 import type { User, Job } from './types';
 import { API_BASE_URL } from './config';
 import { AlertCircle, CheckCircle } from 'lucide-react';
@@ -350,6 +353,10 @@ function App() {
               </RequireAuth>
             } 
           />
+
+          <Route path="/terms" element={<TermsPage />} />
+          <Route path="/privacy" element={<PrivacyPage />} />
+          <Route path="/security" element={<SecurityPage />} />
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

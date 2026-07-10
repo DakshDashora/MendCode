@@ -44,3 +44,4 @@ dist-ssr
 *.sw?
 
 changes.txt
+.agents/

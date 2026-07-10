@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, DateTime, Text, ForeignKey
+from sqlalchemy import Column, String, Integer, DateTime, Text, ForeignKey, Boolean
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 import uuid
@@ -9,9 +9,13 @@ class User(Base):
 
     id = Column(String, primary_key=True, index=True, default=lambda: str(uuid.uuid4()))
     username = Column(String, unique=True, index=True, nullable=False)
+    email = Column(String, unique=True, index=True, nullable=True)
     hashed_password = Column(String, nullable=False)
     role = Column(String, default="user", nullable=False) # "admin" or "user"
     github_token = Column(String, nullable=True)
+    is_verified = Column(Boolean, default=False, nullable=False)
+    verification_otp = Column(String, nullable=True)
+    otp_expires_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.now(timezone.utc))
 
     jobs = relationship("Job", back_populates="user")

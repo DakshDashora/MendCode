@@ -4,18 +4,34 @@ from datetime import datetime
 
 class UserBase(BaseModel):
     username: str
+    email: Optional[str] = None
 
-class UserCreate(UserBase):
+class UserCreate(BaseModel):
+    email: str
     password: str
 
 class UserResponse(UserBase):
     id: str
     role: str
     github_token: Optional[str] = None
+    is_verified: bool
     created_at: datetime
 
     class Config:
         from_attributes = True
+
+class VerifyOtpRequest(BaseModel):
+    email: str
+    otp: str
+
+class GoogleLoginRequest(BaseModel):
+    credential: str
+
+class UsernameCheckResponse(BaseModel):
+    available: bool
+
+class UpdateUsernameRequest(BaseModel):
+    username: str
 
 class Token(BaseModel):
     access_token: str
