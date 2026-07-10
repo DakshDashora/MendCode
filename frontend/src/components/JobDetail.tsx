@@ -36,6 +36,85 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, token, onBack, onRefr
   const [editText, setEditText] = useState<string>('');
   const [savingEdit, setSavingEdit] = useState<boolean>(false);
 
+  // Workspace Codebase Explorer States
+  const [activeDetailTab, setActiveDetailTab] = useState<'changes' | 'explorer'>('changes');
+  const [workspaceTree, setWorkspaceTree] = useState<Array<{ path: string, is_dir: boolean }>>([]);
+  const [loadingTree, setLoadingTree] = useState(false);
+  const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
+  const [loadingFileContent, setLoadingFileContent] = useState(false);
+  const [editingFileContent, setEditingFileContent] = useState<string>('');
+  const [savingWorkspaceFile, setSavingWorkspaceFile] = useState(false);
+  const [explorerSuccessMsg, setExplorerSuccessMsg] = useState<string | null>(null);
+
+  const fetchWorkspaceTree = async () => {
+    setLoadingTree(true);
+    try {
+      const res = await fetch(`${API_BASE_URL}/jobs/${job.id}/workspace/tree`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setWorkspaceTree(data);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingTree(false);
+    }
+  };
+
+  const handleSelectFile = async (filePath: string) => {
+    setSelectedFilePath(filePath);
+    setLoadingFileContent(true);
+    setExplorerSuccessMsg(null);
+    try {
+      const res = await fetch(`${API_BASE_URL}/jobs/${job.id}/workspace/file?path=${encodeURIComponent(filePath)}`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setEditingFileContent(data.content);
+      } else {
+        const data = await res.json();
+        alert(data.detail || 'Cannot read binary files or content.');
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setLoadingFileContent(false);
+    }
+  };
+
+  const handleSaveWorkspaceFile = async () => {
+    if (!selectedFilePath) return;
+    setSavingWorkspaceFile(true);
+    setExplorerSuccessMsg(null);
+    try {
+      const res = await fetch(`${API_BASE_URL}/jobs/${job.id}/workspace/file`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          file_path: selectedFilePath,
+          updated_content: editingFileContent
+        })
+      });
+      if (res.ok) {
+        setExplorerSuccessMsg('File saved successfully in the workspace!');
+        setTimeout(() => setExplorerSuccessMsg(null), 3000);
+      } else {
+        const data = await res.json();
+        alert(data.detail || 'Failed to save changes.');
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setSavingWorkspaceFile(false);
+    }
+  };
+
   const handleStartEdit = (index: number, content: string) => {
     setEditingIndex(index);
     setEditText(content);
@@ -324,135 +403,268 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, token, onBack, onRefr
         {/* Right Column: Execution details and diffs */}
         <div className="main-detail-panel">
           
-          {/* Issue summaries */}
-          {(job.problem_summary || job.root_cause_analysis) && (
-            <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-              {job.problem_summary && (
-                <div>
-                  <div className="info-section-title">
-                    <FileText size={15} /> Problem Summary
-                  </div>
-                  <div className="info-content-card">
-                    {job.problem_summary}
-                  </div>
-                </div>
-              )}
+          {/* Detail Tabs Selector */}
+          <div className="dashboard-tabs-container" style={{ marginBottom: '24px' }}>
+            <button 
+              onClick={() => setActiveDetailTab('changes')} 
+              className={`tab-btn ${activeDetailTab === 'changes' ? 'active' : ''}`}
+            >
+              Proposed Edits & Diffs
+            </button>
+            <button 
+              onClick={() => {
+                setActiveDetailTab('explorer');
+                fetchWorkspaceTree();
+              }} 
+              className={`tab-btn ${activeDetailTab === 'explorer' ? 'active' : ''}`}
+            >
+              Workspace Codebase Explorer
+            </button>
+          </div>
 
-              {job.root_cause_analysis && (
-                <div>
-                  <div className="info-section-title">
-                    <Database size={15} /> Root Cause Analysis
-                  </div>
-                  <div className="info-content-card" style={{ fontFamily: 'var(--font-sans)' }}>
-                    {job.root_cause_analysis}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Diffs & Changes */}
-          <div className="glass-panel">
-            <h4 style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px', textTransform: 'uppercase', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
-              <GitPullRequest size={15} /> Proposed Modifications
-            </h4>
-
-            {!job.approved_changes || job.approved_changes.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-secondary)' }}>
-                No file modifications proposed yet. Edits will be visible here once the agent completes the <code>generate_file_change</code> phase.
-              </div>
-            ) : (
-              <div className="changes-container">
-                {job.approved_changes.map((change, index) => {
-                  const original = change.original_content || '';
-                  const updated = change.updated_content || '';
-                  const diffLines = computeLineDiff(original, updated);
-                  const isEditingThis = editingIndex === index;
-
-                  return (
-                    <div key={index} className="change-card">
-                      <div className="change-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
-                        <div>
-                          <span className="change-filepath">{formatFilePath(change.file_path)}</span>
-                          <span className="change-objective" style={{ marginLeft: '12px', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                            {change.objective}
-                          </span>
-                        </div>
-                        {job.status === 'AWAITING_APPROVAL' && (
-                          <div style={{ display: 'flex', gap: '8px' }}>
-                            {isEditingThis ? (
-                              <>
-                                <button 
-                                  onClick={() => handleSaveEdit(change.file_path)} 
-                                  className="btn btn-primary" 
-                                  disabled={savingEdit}
-                                  style={{ padding: '4px 10px', fontSize: '0.72rem' }}
-                                >
-                                  {savingEdit ? 'Saving...' : 'Save'}
-                                </button>
-                                <button 
-                                  onClick={handleCancelEdit} 
-                                  className="btn btn-secondary"
-                                  style={{ padding: '4px 10px', fontSize: '0.72rem' }}
-                                >
-                                  Cancel
-                                </button>
-                              </>
-                            ) : (
-                              <button 
-                                onClick={() => handleStartEdit(index, change.updated_content || '')} 
-                                className="btn btn-secondary"
-                                style={{ padding: '4px 10px', fontSize: '0.72rem' }}
-                              >
-                                Edit Code
-                              </button>
-                            )}
-                          </div>
-                        )}
+          {activeDetailTab === 'changes' ? (
+            <>
+              {/* Issue summaries */}
+              {(job.problem_summary || job.root_cause_analysis) && (
+                <div className="glass-panel" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+                  {job.problem_summary && (
+                    <div>
+                      <div className="info-section-title">
+                        <FileText size={15} /> Problem Summary
                       </div>
-                      
-                      <div className="diff-content">
-                        {isEditingThis ? (
-                          <div style={{ padding: '12px 16px', backgroundColor: 'var(--bg-app)' }}>
-                            <textarea
-                              value={editText}
-                              onChange={(e) => setEditText(e.target.value)}
-                              rows={15}
-                              style={{
-                                width: '100%',
-                                fontFamily: 'var(--font-mono)',
-                                fontSize: '0.8rem',
-                                padding: '12px',
-                                border: '1px solid var(--border)',
-                                borderRadius: 'var(--radius)',
-                                backgroundColor: 'var(--input-bg)',
-                                color: 'var(--text-primary)',
-                                resize: 'vertical',
-                                outline: 'none'
-                              }}
-                            />
-                          </div>
-                        ) : diffLines.length === 0 ? (
-                          <div style={{ padding: '16px 20px', fontStyle: 'italic', color: 'var(--text-muted)' }}>
-                            No changes made to this file.
-                          </div>
-                        ) : (
-                          diffLines.map((line, lIdx) => (
-                            <div key={lIdx} className={`diff-line ${line.type}`}>
-                              <span style={{ width: '20px', display: 'inline-block', opacity: 0.5, userSelect: 'none', marginRight: '6px' }}>
-                                {line.type === 'addition' ? '+' : line.type === 'deletion' ? '-' : ' '}
-                              </span>
-                              <span>{line.text || ' '}</span>
-                            </div>
-                          ))
-                        )}
+                      <div className="info-content-card">
+                        {job.problem_summary}
                       </div>
                     </div>
-                  );
-                })}
+                  )}
+
+                  {job.root_cause_analysis && (
+                    <div>
+                      <div className="info-section-title">
+                        <Database size={15} /> Root Cause Analysis
+                      </div>
+                      <div className="info-content-card" style={{ fontFamily: 'var(--font-sans)' }}>
+                        {job.root_cause_analysis}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Diffs & Changes */}
+              <div className="glass-panel">
+                <h4 style={{ marginBottom: '20px', display: 'flex', alignItems: 'center', gap: '8px', textTransform: 'uppercase', fontSize: '0.78rem', color: 'var(--text-secondary)' }}>
+                  <GitPullRequest size={15} /> Proposed Modifications
+                </h4>
+
+                {!job.approved_changes || job.approved_changes.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-secondary)' }}>
+                    No file modifications proposed yet. Edits will be visible here once the agent completes the <code>generate_file_change</code> phase.
+                  </div>
+                ) : (
+                  <div className="changes-container">
+                    {job.approved_changes.map((change, index) => {
+                      const original = change.original_content || '';
+                      const updated = change.updated_content || '';
+                      const diffLines = computeLineDiff(original, updated);
+                      const isEditingThis = editingIndex === index;
+
+                      return (
+                        <div key={index} className="change-card">
+                          <div className="change-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '8px' }}>
+                            <div>
+                              <span className="change-filepath">{formatFilePath(change.file_path)}</span>
+                              <span className="change-objective" style={{ marginLeft: '12px', fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+                                {change.objective}
+                              </span>
+                            </div>
+                            {job.status === 'AWAITING_APPROVAL' && (
+                              <div style={{ display: 'flex', gap: '8px' }}>
+                                {isEditingThis ? (
+                                  <>
+                                    <button 
+                                      onClick={() => handleSaveEdit(change.file_path)} 
+                                      className="btn btn-primary" 
+                                      disabled={savingEdit}
+                                      style={{ padding: '4px 10px', fontSize: '0.72rem' }}
+                                    >
+                                      {savingEdit ? 'Saving...' : 'Save'}
+                                    </button>
+                                    <button 
+                                      onClick={handleCancelEdit} 
+                                      className="btn btn-secondary"
+                                      style={{ padding: '4px 10px', fontSize: '0.72rem' }}
+                                    >
+                                      Cancel
+                                    </button>
+                                  </>
+                                ) : (
+                                  <button 
+                                    onClick={() => handleStartEdit(index, change.updated_content || '')} 
+                                    className="btn btn-secondary"
+                                    style={{ padding: '4px 10px', fontSize: '0.72rem' }}
+                                  >
+                                    Edit Code
+                                  </button>
+                                )}
+                              </div>
+                            )}
+                          </div>
+                          
+                          <div className="diff-content">
+                            {isEditingThis ? (
+                              <div style={{ padding: '12px 16px', backgroundColor: 'var(--bg-app)' }}>
+                                <textarea
+                                  value={editText}
+                                  onChange={(e) => setEditText(e.target.value)}
+                                  rows={15}
+                                  style={{
+                                    width: '100%',
+                                    fontFamily: 'var(--font-mono)',
+                                    fontSize: '0.8rem',
+                                    padding: '12px',
+                                    border: '1px solid var(--border)',
+                                    borderRadius: 'var(--radius)',
+                                    backgroundColor: 'var(--input-bg)',
+                                    color: 'var(--text-primary)',
+                                    resize: 'vertical',
+                                    outline: 'none'
+                                  }}
+                                />
+                              </div>
+                            ) : diffLines.length === 0 ? (
+                              <div style={{ padding: '16px 20px', fontStyle: 'italic', color: 'var(--text-muted)' }}>
+                                No changes made to this file.
+                              </div>
+                            ) : (
+                              diffLines.map((line, lIdx) => (
+                                <div key={lIdx} className={`diff-line ${line.type}`}>
+                                  <span style={{ width: '20px', display: 'inline-block', opacity: 0.5, userSelect: 'none', marginRight: '6px' }}>
+                                    {line.type === 'addition' ? '+' : line.type === 'deletion' ? '-' : ' '}
+                                  </span>
+                                  <span>{line.text || ' '}</span>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
-            )}
-          </div>
+            </>
+          ) : (
+            <div className="glass-panel" style={{ padding: '0px', overflow: 'hidden' }}>
+              <div style={{ display: 'flex', minHeight: '500px', flexWrap: 'wrap' }}>
+                {/* LHS: File Tree Directory list */}
+                <div style={{ flex: 1, minWidth: '240px', borderRight: '1px solid var(--border)', padding: '20px', maxHeight: '600px', overflowY: 'auto', background: 'rgba(0,0,0,0.15)' }}>
+                  <h5 style={{ textTransform: 'uppercase', fontSize: '0.78rem', color: 'var(--text-secondary)', marginBottom: '16px' }}>
+                    Cloned Files Tree
+                  </h5>
+                  {loadingTree ? (
+                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Loading file tree...</div>
+                  ) : workspaceTree.length === 0 ? (
+                    <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Workspace folder is empty or not yet cloned.</div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
+                      {workspaceTree.map((item, idx) => {
+                        const isSelected = selectedFilePath === item.path;
+                        return (
+                          <button
+                            key={idx}
+                            onClick={() => !item.is_dir && handleSelectFile(item.path)}
+                            disabled={item.is_dir}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              width: '100%',
+                              padding: '6px 10px',
+                              background: isSelected ? 'var(--accent-glow)' : 'transparent',
+                              border: 'none',
+                              borderRadius: 'var(--radius)',
+                              color: item.is_dir ? 'var(--text-secondary)' : isSelected ? 'var(--accent)' : 'var(--text-primary)',
+                              fontSize: '0.82rem',
+                              fontWeight: isSelected ? 700 : 400,
+                              cursor: item.is_dir ? 'default' : 'pointer',
+                              textAlign: 'left',
+                              paddingLeft: `${(item.path.split('/').length - 1) * 12 + 10}px`
+                            }}
+                          >
+                            <span style={{ marginRight: '8px' }}>
+                              {item.is_dir ? '📁' : '📄'}
+                            </span>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {item.path.split('/').pop()}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* RHS: Code Viewer / Editor */}
+                <div style={{ flex: 2, minWidth: '320px', padding: '20px', display: 'flex', flexDirection: 'column' }}>
+                  {selectedFilePath ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', borderBottom: '1px solid var(--border)', paddingBottom: '12px' }}>
+                        <div>
+                          <span style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', display: 'block' }}>Editing Workspace File</span>
+                          <span style={{ fontSize: '0.92rem', fontWeight: 700, fontFamily: 'var(--font-mono)' }}>{selectedFilePath}</span>
+                        </div>
+                        <button
+                          onClick={handleSaveWorkspaceFile}
+                          className="btn btn-primary"
+                          disabled={savingWorkspaceFile || loadingFileContent}
+                          style={{ padding: '6px 14px', fontSize: '0.8rem' }}
+                        >
+                          {savingWorkspaceFile ? 'Saving...' : 'Save File'}
+                        </button>
+                      </div>
+
+                      {explorerSuccessMsg && (
+                        <div className="alert alert-success" style={{ marginBottom: '16px' }}>
+                          <Check size={16} />
+                          <span>{explorerSuccessMsg}</span>
+                        </div>
+                      )}
+
+                      {loadingFileContent ? (
+                        <div style={{ color: 'var(--text-secondary)', padding: '40px 0', textAlign: 'center' }}>
+                          Reading file contents...
+                        </div>
+                      ) : (
+                        <textarea
+                          value={editingFileContent}
+                          onChange={(e) => setEditingFileContent(e.target.value)}
+                          rows={20}
+                          style={{
+                            width: '100%',
+                            fontFamily: 'var(--font-mono)',
+                            fontSize: '0.8rem',
+                            padding: '16px',
+                            border: '1px solid var(--border)',
+                            borderRadius: 'var(--radius)',
+                            backgroundColor: 'var(--input-bg)',
+                            color: 'var(--text-primary)',
+                            outline: 'none',
+                            resize: 'vertical',
+                            lineHeight: '1.4'
+                          }}
+                        />
+                      )}
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', flex: 1, padding: '60px 20px', color: 'var(--text-secondary)', textAlign: 'center' }}>
+                      <FileText size={40} style={{ opacity: 0.3, marginBottom: '16px' }} />
+                      <p style={{ fontSize: '0.9rem' }}>Select a file from the repository tree on the left to read or edit its raw code.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
         </div>
       </div>
@@ -462,15 +674,62 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, token, onBack, onRefr
         <div className="loading-overlay">
           <div className="loading-overlay-content">
             
-            {/* Visual Action Panel */}
-            <div className="overlay-visual-column">
-              <div className="spinner"></div>
-              <h3 style={{ color: 'white', marginBottom: '8px', fontSize: '1.2rem', fontWeight: 600 }}>AI Agent Executing</h3>
-              <p style={{ color: '#8b949e', fontSize: '0.82rem', maxWidth: '300px', lineHeight: '1.4' }}>
-                {job.status === 'RUNNING' 
-                  ? `Active: ${job.current_step ? steps.find(s => s.key === job.current_step)?.label || job.current_step : 'Processing'}` 
-                  : 'Starting PR agent execution sequence...'}
-              </p>
+            {/* Visual Action Panel: Stepper list instead of simple spinner */}
+            <div className="overlay-visual-column" style={{ alignItems: 'flex-start', justifyContent: 'flex-start', textAlign: 'left', overflowY: 'auto' }}>
+              <div style={{ width: '100%', borderBottom: '1px solid #30363d', paddingBottom: '16px', marginBottom: '20px' }}>
+                <h3 style={{ color: 'white', fontSize: '1.2rem', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '10px' }}>
+                  <Loader2 size={18} className="animate-spin" style={{ color: 'var(--accent)' }} /> 
+                  AI Agent Executing
+                </h3>
+                <p style={{ color: '#8b949e', fontSize: '0.8rem', marginTop: '6px', lineHeight: '1.4' }}>
+                  {job.status === 'RUNNING' 
+                    ? `Currently: ${job.current_step ? steps.find(s => s.key === job.current_step)?.label || job.current_step : 'Processing'}` 
+                    : 'Starting PR agent execution sequence...'}
+                </p>
+              </div>
+
+              <div className="stepper-list" style={{ width: '100%' }}>
+                {steps.map((step, idx) => {
+                  const status = getStepStatus(idx);
+                  return (
+                    <div key={step.key} className={`step-item ${status}`} style={{ margin: '12px 0', display: 'flex', alignItems: 'flex-start' }}>
+                      <div className="step-icon" style={{
+                        width: '18px',
+                        height: '18px',
+                        borderRadius: '50%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '9px',
+                        border: status === 'completed' ? '1px solid #22c55e' : status === 'active' ? '1px solid #06b6d4' : '1px solid #30363d',
+                        background: status === 'completed' ? '#22c55e22' : status === 'active' ? '#06b6d422' : 'transparent',
+                        color: status === 'completed' ? '#22c55e' : status === 'active' ? '#06b6d4' : '#6e7681',
+                        marginRight: '12px',
+                        flexShrink: 0
+                      }}>
+                        {status === 'completed' && <Check size={9} />}
+                        {status === 'active' && <Loader2 size={9} className="animate-spin" />}
+                        {status === 'failed' && <XIcon size={9} />}
+                        {status === 'pending' && <span style={{ width: '4px', height: '4px', borderRadius: '50%', background: '#30363d' }}></span>}
+                      </div>
+                      <div style={{ flex: 1 }}>
+                        <div className="step-label" style={{
+                          fontSize: '0.85rem',
+                          fontWeight: status === 'active' ? 700 : 500,
+                          color: status === 'completed' ? '#e6edf3' : status === 'active' ? '#58a6ff' : '#8b949e'
+                        }}>
+                          {step.label}
+                        </div>
+                        {status === 'active' && (
+                          <p style={{ fontSize: '0.72rem', color: '#8b949e', marginTop: '2px', lineHeight: '1.3' }}>
+                            {step.desc}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             {/* Console Log Panel */}

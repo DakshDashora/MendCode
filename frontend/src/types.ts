@@ -1,8 +1,10 @@
 export interface User {
   id: string;
   username: string;
+  email: string | null;
   role: string;
   github_token: string | null;
+  is_verified: boolean;
   created_at: string;
 }
 

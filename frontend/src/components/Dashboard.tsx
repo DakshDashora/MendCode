@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Github, Play, RefreshCw, Terminal, CheckCircle2, AlertTriangle, Layers, GitPullRequest, AlertCircle } from 'lucide-react';
 import type { User, Job } from '../types';
 import { API_BASE_URL } from '../config';
@@ -27,7 +27,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onSubmitJob,
   onJobClick,
 }) => {
-  const [activeTab, setActiveTab] = useState<'history' | 'solve'>('history');
+  const [activeTab, setActiveTab] = useState<'history' | 'solve' | 'profile'>('history');
   
   // Solve New Issue Form State
   const [issueUrl, setIssueUrl] = useState('');
@@ -37,6 +37,74 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [llmProvider, setLlmProvider] = useState('groq');
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  // Profile Username Edit State
+  const [newUsername, setNewUsername] = useState(user?.username || '');
+  const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
+  const [checkingUsername, setCheckingUsername] = useState(false);
+  const [usernameUpdateError, setUsernameUpdateError] = useState<string | null>(null);
+  const [usernameUpdateSuccess, setUsernameUpdateSuccess] = useState<string | null>(null);
+
+  useEffect(() => {
+    setNewUsername(user?.username || '');
+  }, [user]);
+
+  // Debounced username availability check
+  useEffect(() => {
+    if (!newUsername || newUsername.trim() === '' || newUsername === user?.username) {
+      setUsernameAvailable(null);
+      return;
+    }
+
+    setCheckingUsername(true);
+    const delayDebounce = setTimeout(async () => {
+      try {
+        const response = await fetch(`${API_BASE_URL}/auth/check-username?username=${encodeURIComponent(newUsername.trim())}`);
+        if (response.ok) {
+          const data = await response.json();
+          setUsernameAvailable(data.available);
+        }
+      } catch (err) {
+        console.error('Error checking username', err);
+      } finally {
+        setCheckingUsername(false);
+      }
+    }, 400);
+
+    return () => clearTimeout(delayDebounce);
+  }, [newUsername, user?.username]);
+
+  const handleUpdateUsername = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setUsernameUpdateError(null);
+    setUsernameUpdateSuccess(null);
+
+    if (!newUsername || newUsername.trim() === '') {
+      setUsernameUpdateError('Username cannot be empty');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/auth/username`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ username: newUsername.trim() }),
+      });
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.detail || 'Failed to update username');
+      }
+
+      setUsernameUpdateSuccess('Username updated successfully!');
+      onRefresh();
+    } catch (err: any) {
+      setUsernameUpdateError(err.message || 'Error updating username');
+    }
+  };
 
   const handleUrlChange = (val: string) => {
     setIssueUrl(val);
@@ -135,6 +203,12 @@ export const Dashboard: React.FC<DashboardProps> = ({
           className={`tab-btn ${activeTab === 'solve' ? 'active' : ''}`}
         >
           Solve New Issue
+        </button>
+        <button 
+          onClick={() => setActiveTab('profile')} 
+          className={`tab-btn ${activeTab === 'profile' ? 'active' : ''}`}
+        >
+          My Profile
         </button>
       </div>
 
@@ -355,6 +429,129 @@ export const Dashboard: React.FC<DashboardProps> = ({
               </button>
             </form>
           )}
+        </div>
+      )}
+
+      {/* TAB CONTENT: MY PROFILE */}
+      {activeTab === 'profile' && (
+        <div className="glass-panel" style={{ maxWidth: '640px', margin: '0 auto' }}>
+          <h3 style={{ fontSize: '1.4rem', marginBottom: '8px' }}>My Profile</h3>
+          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '24px' }}>
+            Manage your credentials, branding name, and GitHub authentication connections.
+          </p>
+
+          {/* User metadata */}
+          <div style={{ padding: '16px', background: 'var(--border)', borderRadius: 'var(--radius)', marginBottom: '24px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Email Address</span>
+              <span style={{ fontWeight: 700 }}>{user?.email || 'N/A (Google Sign-In)'}</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Current Username</span>
+              <span style={{ fontWeight: 700 }}>{user?.username}</span>
+            </div>
+          </div>
+
+          {/* Username edit form with live check */}
+          <form onSubmit={handleUpdateUsername} style={{ marginBottom: '32px', borderBottom: '1px solid var(--border)', paddingBottom: '24px' }}>
+            <h4 style={{ fontSize: '1.1rem', marginBottom: '16px' }}>Change Username</h4>
+            
+            {usernameUpdateError && (
+              <div className="alert alert-danger" style={{ marginBottom: '16px' }}>
+                <AlertCircle size={16} />
+                <span>{usernameUpdateError}</span>
+              </div>
+            )}
+
+            {usernameUpdateSuccess && (
+              <div className="alert alert-success" style={{ marginBottom: '16px' }}>
+                <CheckCircle2 size={16} />
+                <span>{usernameUpdateSuccess}</span>
+              </div>
+            )}
+
+            <div className="form-group">
+              <label className="form-label" htmlFor="profile-username">
+                New Username
+              </label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  id="profile-username"
+                  type="text"
+                  className="form-input"
+                  style={{ width: '100%' }}
+                  placeholder="Enter new username"
+                  value={newUsername}
+                  onChange={(e) => setNewUsername(e.target.value)}
+                  disabled={loading}
+                />
+              </div>
+
+              {/* Live username availability indicator */}
+              <div style={{ marginTop: '8px', minHeight: '20px', fontSize: '0.85rem' }}>
+                {checkingUsername && (
+                  <span style={{ color: 'var(--text-secondary)' }}>Checking availability...</span>
+                )}
+                {!checkingUsername && usernameAvailable === true && (
+                  <span style={{ color: '#22c55e', fontWeight: 600 }}>✓ Username is available</span>
+                )}
+                {!checkingUsername && usernameAvailable === false && (
+                  <span style={{ color: '#ef4444', fontWeight: 600 }}>✗ Username is already taken</span>
+                )}
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className="btn btn-primary"
+              style={{ padding: '8px 16px' }}
+              disabled={loading || usernameAvailable === false || newUsername.trim() === '' || newUsername === user?.username}
+            >
+              Save Username
+            </button>
+          </form>
+
+          {/* GitHub Connection Status */}
+          <div>
+            <h4 style={{ fontSize: '1.1rem', marginBottom: '16px' }}>GitHub Integration</h4>
+            {user && !user.github_token ? (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Disconnect / Link GitHub profile</span>
+                <button onClick={handleGithubConnect} className="btn btn-primary">
+                  <Github size={16} /> Link GitHub Profile
+                </button>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <span style={{ color: '#22c55e', fontWeight: 600, display: 'block', fontSize: '0.95rem' }}>Connected</span>
+                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>MendCode is authorized to open Pull Requests on your behalf.</span>
+                </div>
+                <button 
+                  type="button"
+                  onClick={async () => {
+                    if (confirm("Disconnect GitHub account?")) {
+                      try {
+                        const response = await fetch(`${API_BASE_URL}/auth/github/disconnect`, {
+                          method: 'POST',
+                          headers: { Authorization: `Bearer ${token}` }
+                        });
+                        if (response.ok) {
+                          onRefresh();
+                        }
+                      } catch (err) {
+                        alert(err);
+                      }
+                    }
+                  }} 
+                  className="btn" 
+                  style={{ background: 'var(--border)', borderColor: 'var(--border)', color: '#ef4444' }}
+                >
+                  Disconnect
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       )}
 

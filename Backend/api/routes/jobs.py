@@ -2,11 +2,13 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 from typing import List
 import json
+import os
+from pathlib import Path
 
 from api.dbconfig import get_db, SessionLocal
 from api.models import Job, User
 from api.schemas import JobCreate, JobResponse, ChangeUpdateRequest
-from api.auth_utils import get_current_user, decrypt_token
+from api.utils.auth import get_current_user, decrypt_token
 from graph import create_graph
 from schemas.state import IssueState
 
@@ -23,14 +25,13 @@ def run_agent_job(job_id: str, github_token: str, payload: JobCreate = None, res
         db.commit()
 
         app = create_graph()
-        # Use job_id as the thread_id to maintain state across requests
         config = {"configurable": {"thread_id": job_id, "github_token": github_token}}
 
         if resume:
-            # Resume from checkpoint
-            app.invoke(None, config)
+            # Resume from checkpoint using stream
+            stream = app.stream(None, config, stream_mode="values")
         else:
-            # Start new job
+            # Start new job using stream
             state = IssueState(
                 repo_owner=payload.repo_owner,
                 repo_name=payload.repo_name,
@@ -38,28 +39,48 @@ def run_agent_job(job_id: str, github_token: str, payload: JobCreate = None, res
                 llm_provider=payload.llm_provider,
                 github_token=github_token
             )
-            app.invoke(state, config)
+            stream = app.stream(state, config, stream_mode="values")
 
-        # After invoke, check the current state of the graph
+        final_state = {}
+        for state_update in stream:
+            final_state = state_update
+            # Write progress live to database on every step
+            inner_db = SessionLocal()
+            try:
+                db_job = inner_db.query(Job).filter(Job.id == job_id).first()
+                if db_job:
+                    db_job.console_logs = json.dumps(state_update.get("console_logs", []))
+                    db_job.current_step = state_update.get("current_step")
+                    db_job.issue_title = state_update.get("issue_title")
+                    db_job.problem_summary = state_update.get("problem_summary")
+                    db_job.root_cause_analysis = state_update.get("root_cause_analysis")
+                    db_job.pr_url = state_update.get("pr_url")
+                    db_job.approved_changes = json.dumps(state_update.get("approved_changes", []))
+                    inner_db.commit()
+            except Exception as e:
+                print(f"Error writing stream logs: {e}")
+            finally:
+                inner_db.close()
+
+        # After stream finishes, check final state & next step target
         snapshot = app.get_state(config)
-        final_state = snapshot.values
-
-        # Refresh job instance
-        job = db.query(Job).filter(Job.id == job_id).first()
         
-        if snapshot.next and "apply_file_change" in snapshot.next:
-            job.status = "AWAITING_APPROVAL"
-        else:
-            job.status = "COMPLETED"
-            
-        job.current_step = final_state.get("current_step")
-        job.issue_title = final_state.get("issue_title")
-        job.problem_summary = final_state.get("problem_summary")
-        job.root_cause_analysis = final_state.get("root_cause_analysis")
-        job.pr_url = final_state.get("pr_url")
-        job.approved_changes = json.dumps(final_state.get("approved_changes", []))
-        job.console_logs = json.dumps(final_state.get("console_logs", []))
-        db.commit()
+        # Refresh job row
+        job = db.query(Job).filter(Job.id == job_id).first()
+        if job:
+            if snapshot.next and "apply_file_change" in snapshot.next:
+                job.status = "AWAITING_APPROVAL"
+            else:
+                job.status = "COMPLETED"
+                
+            job.current_step = final_state.get("current_step")
+            job.issue_title = final_state.get("issue_title")
+            job.problem_summary = final_state.get("problem_summary")
+            job.root_cause_analysis = final_state.get("root_cause_analysis")
+            job.pr_url = final_state.get("pr_url")
+            job.approved_changes = json.dumps(final_state.get("approved_changes", []))
+            job.console_logs = json.dumps(final_state.get("console_logs", []))
+            db.commit()
     except Exception as e:
         job = db.query(Job).filter(Job.id == job_id).first()
         if job:
@@ -179,3 +200,103 @@ async def update_job_changes(
         pass
 
     return format_job_response(job)
+
+# Workspace File Explorer Helper and Endpoints
+def get_safe_workspace_path(job_id: str, relative_path: str) -> Path:
+    # Isolate workspace per job
+    job_dir = Path("workspace/repos") / job_id
+    if not job_dir.exists():
+        raise HTTPException(status_code=404, detail="Workspace directory not found")
+    
+    # Find the repository subfolder (there should be exactly one folder cloned under job_id)
+    subdirs = [d for d in job_dir.iterdir() if d.is_dir() and d.name != ".git"]
+    if not subdirs:
+        raise HTTPException(status_code=404, detail="Workspace repository not found")
+        
+    repo_base = subdirs[0].resolve()
+    target_path = (repo_base / relative_path).resolve()
+    
+    # Enforce path traversal block
+    if not str(target_path).startswith(str(repo_base)):
+        raise HTTPException(status_code=403, detail="Access denied: path traversal attempt detected")
+        
+    return target_path
+
+@router.get("/{job_id}/workspace/tree")
+async def get_workspace_tree(job_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    job = db.query(Job).filter(Job.id == job_id, Job.user_id == current_user.id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+        
+    job_dir = Path("workspace/repos") / job_id
+    if not job_dir.exists():
+        return []
+        
+    subdirs = [d for d in job_dir.iterdir() if d.is_dir() and d.name != ".git"]
+    if not subdirs:
+        return []
+        
+    repo_base = subdirs[0].resolve()
+    
+    file_list = []
+    ignore_patterns = {".git", "node_modules", ".venv", "__pycache__", "dist", "build", ".venv-test"}
+    
+    for root, dirs, files in os.walk(repo_base):
+        # Modify dirs in-place to avoid traversing ignored folders
+        dirs[:] = [d for d in dirs if d not in ignore_patterns]
+        
+        for file in files:
+            full_path = Path(root) / file
+            rel_path = full_path.relative_to(repo_base)
+            file_list.append({
+                "path": str(rel_path),
+                "is_dir": False
+            })
+            
+        for d in dirs:
+            full_path = Path(root) / d
+            rel_path = full_path.relative_to(repo_base)
+            file_list.append({
+                "path": str(rel_path),
+                "is_dir": True
+            })
+            
+    file_list.sort(key=lambda x: x["path"])
+    return file_list
+
+@router.get("/{job_id}/workspace/file")
+async def get_workspace_file(job_id: str, path: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    job = db.query(Job).filter(Job.id == job_id, Job.user_id == current_user.id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+        
+    target_path = get_safe_workspace_path(job_id, path)
+    if not target_path.exists() or not target_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+        
+    # Check if file is binary
+    try:
+        with open(target_path, "r", encoding="utf-8") as f:
+            content = f.read()
+        return {"content": content}
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="Cannot read binary file contents.")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading file: {str(e)}")
+
+@router.put("/{job_id}/workspace/file")
+async def update_workspace_file(job_id: str, payload: ChangeUpdateRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    job = db.query(Job).filter(Job.id == job_id, Job.user_id == current_user.id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+        
+    target_path = get_safe_workspace_path(job_id, payload.file_path)
+    try:
+        # Create parent directories if they don't exist
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(target_path, "w", encoding="utf-8") as f:
+            f.write(payload.updated_content)
+        return {"status": "success"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error writing file: {str(e)}")
+
