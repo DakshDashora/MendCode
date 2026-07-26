@@ -254,6 +254,40 @@ h1, h2, h3, h4 {
   position: relative;
 }
 
+/* Navigation Links */
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.nav-link {
+  text-decoration: none;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  padding: 6px 14px;
+  border-radius: var(--radius);
+  transition: color 0.15s, background-color 0.15s;
+}
+
+.nav-link:hover {
+  color: var(--text-primary);
+  background-color: var(--bg-app);
+}
+
+.nav-link.active {
+  color: var(--accent);
+  font-weight: 600;
+  background-color: var(--accent-glow, rgba(253, 140, 115, 0.08));
+}
+
+@media (max-width: 640px) {
+  .nav-links {
+    display: none;
+  }
+}
+
 /* Navbar Menu Popovers */
 .nav-menu-container {
   position: relative;
@@ -979,3 +1013,106 @@ h1, h2, h3, h4 {
   border: 1px solid var(--success-border);
 }
 
+/* ===== Collapsible File Tree ===== */
+.tree-container {
+  display: flex;
+  flex-direction: column;
+}
+
+.tree-node {
+  user-select: none;
+}
+
+.tree-node-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: background-color 0.12s;
+  font-size: 0.82rem;
+  color: var(--text-primary);
+  border: none;
+  background: none;
+  width: 100%;
+  text-align: left;
+}
+
+.tree-node-row:hover {
+  background-color: var(--bg-app);
+}
+
+.tree-node-row.selected {
+  background-color: var(--accent-glow, rgba(253, 140, 115, 0.1));
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.tree-node-row.is-dir {
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.tree-toggle {
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: transform 0.15s;
+  color: var(--text-secondary);
+  font-size: 0.65rem;
+}
+
+.tree-toggle.expanded {
+  transform: rotate(90deg);
+}
+
+.tree-toggle.hidden {
+  visibility: hidden;
+}
+
+.tree-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tree-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+}
+
+.tree-children {
+  overflow: hidden;
+  transition: max-height 0.2s ease-out, opacity 0.15s;
+}
+
+.tree-children.collapsed {
+  max-height: 0;
+  opacity: 0;
+}
+
+.tree-children.expanded {
+  max-height: 9999px;
+  opacity: 1;
+}
+
+/* File type icon colors */
+.tree-icon-ts { color: #3178c6; }
+.tree-icon-js { color: #f7df1e; }
+.tree-icon-py { color: #3776ab; }
+.tree-icon-json { color: #e37933; }
+.tree-icon-css { color: #e34f9d; }
+.tree-icon-html { color: #e34c26; }
+.tree-icon-md { color: #8b949e; }
+.tree-icon-env { color: #ef4444; }
+.tree-icon-folder { color: #f59e0b; }
+.tree-icon-default { color: var(--text-secondary); }

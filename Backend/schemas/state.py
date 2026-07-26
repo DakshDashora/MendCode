@@ -3,6 +3,19 @@ from typing import List, Optional
 
 
 class IssueState(BaseModel):
+    """
+    State definition for the MendCode LangGraph Agentic PR Pipeline.
+
+    This model serves as the single source of truth passed across all nodes in the state graph.
+    It contains:
+    - User input parameters (target repository details, auth token, select LLM option).
+    - Fetched GitHub issue description metadata.
+    - Derived issue analysis structures (acceptance criteria, search terms).
+    - Workspace directories and target files selected by the LLM.
+    - Code investigation outcomes, modification specifications, and generated file edits.
+    - Loop metrics tracking LLM-based review retries and AST validation retries.
+    - Real-time logging telemetry synced to the SQL relational database.
+    """
     # User Input
     repo_owner: str
     repo_name: str

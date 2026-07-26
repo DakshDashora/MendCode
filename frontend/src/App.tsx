@@ -9,6 +9,8 @@ import { Footer } from './components/Footer';
 import { TermsPage } from './components/TermsPage';
 import { PrivacyPage } from './components/PrivacyPage';
 import { SecurityPage } from './components/SecurityPage';
+import { HowItWorksPage } from './components/HowItWorksPage';
+import { ProfilePage } from './components/ProfilePage';
 import type { User, Job } from './types';
 import { API_BASE_URL } from './config';
 import { AlertCircle, CheckCircle } from 'lucide-react';
@@ -316,7 +318,7 @@ function App() {
         <Routes>
           <Route 
             path="/" 
-            element={token ? <Navigate to="/dashboard" replace /> : <LandingPage onGetStartedClick={() => handleOpenAuthModal('register')} />} 
+            element={<LandingPage onGetStartedClick={() => handleOpenAuthModal('register')} isLoggedIn={!!token} />} 
           />
           
           <Route 
@@ -357,6 +359,21 @@ function App() {
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/security" element={<SecurityPage />} />
+          <Route path="/how-it-works" element={<HowItWorksPage />} />
+          <Route 
+            path="/profile" 
+            element={
+              <RequireAuth>
+                {user ? (
+                  <ProfilePage 
+                    user={user} 
+                    token={token || ''} 
+                    onRefresh={() => token && fetchUser(token)} 
+                  />
+                ) : <div />}
+              </RequireAuth>
+            } 
+          />
 
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

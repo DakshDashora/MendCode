@@ -31,6 +31,18 @@ GITHUB_REDIRECT_URI = os.getenv("GITHUB_REDIRECT_URI")
 
 @router.post("/register", response_model=UserResponse)
 def register(user_data: UserCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    """
+    Register a new user account with MendCode.
+
+    This endpoint performs the following operations:
+    1. **Duplicate Check**: Checks if the target email is already registered and verified.
+    2. **Temporary User Resend**: If the email is registered but unverified, it resets the verification OTP code and sends a new registration email.
+    3. **Username Generation**: Automatically derives a unique username prefix from the email.
+    4. **Background Task dispatch**: Offloads sending of the 6-digit OTP verification email to background workers using FastAPI BackgroundTasks.
+
+    - **user_data**: Pydantic schema containing user email and password requirements.
+    - **return**: Created user response schema with verification pending status.
+    """
     # 1. Check if email already registered
     db_user_email = db.query(User).filter(User.email == user_data.email).first()
     if db_user_email:
@@ -76,6 +88,18 @@ def register(user_data: UserCreate, background_tasks: BackgroundTasks, db: Sessi
 
 @router.post("/login", response_model=Token)
 def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    """
+    Authenticate via Username/Email and Password.
+
+    This standard OAuth2 password flow endpoint:
+    1. Authenticates users by matching either their raw **username** or their registered **email address**.
+    2. Verifies the password using CryptContext bcrypt hashing.
+    3. Restricts logins for unverified users who have not completed OTP flow.
+    4. Generates a sign-in access JWT token containing `id`, `sub` (username), and authorization `role`.
+
+    - **form_data**: Standard Form parameters containing username (or email) and password.
+    - **return**: Bearer Access token payload.
+    """
     # Lookup by username OR email
     user = db.query(User).filter(
         (User.username == form_data.username) | (User.email == form_data.username)
@@ -97,6 +121,18 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 
 @router.post("/verify-otp", response_model=Token)
 def verify_otp(payload: VerifyOtpRequest, db: Session = Depends(get_db)):
+    """
+    Verify registration OTP code.
+
+    This endpoint:
+    1. Validates the 6-digit OTP code against the database.
+    2. Checks OTP expiration (codes are valid for 10 minutes).
+    3. Activates the user account (`is_verified = True`) and clears OTP state fields.
+    4. Returns a logged-in Bearer JWT access token.
+
+    - **payload**: Schema containing user email and the 6-digit verification code.
+    - **return**: Bearer Access token payload.
+    """
     user = db.query(User).filter(User.email == payload.email).first()
     if not user:
         raise HTTPException(status_code=404, detail="Email not found")
@@ -128,6 +164,17 @@ def verify_otp(payload: VerifyOtpRequest, db: Session = Depends(get_db)):
 
 @router.post("/google", response_model=Token)
 async def google_login(payload: GoogleLoginRequest, db: Session = Depends(get_db)):
+    """
+    Authenticate/Sign Up via Google OAuth Credentials.
+
+    This endpoint verifies the ID token with Google's OAuth2 token info service.
+    If the Google account email is registered, the user is authenticated and active.
+    If the email is new, a unique username prefix is derived, a random secure password is set,
+    and a verified user account is created on-the-fly.
+
+    - **payload**: The Google credential ID Token received from Google Sign-In.
+    - **return**: Bearer Access token payload.
+    """
     async with httpx.AsyncClient() as client:
         res = await client.get(f"https://oauth2.googleapis.com/tokeninfo?id_token={payload.credential}")
         if res.status_code != 200:
@@ -172,6 +219,15 @@ async def google_login(payload: GoogleLoginRequest, db: Session = Depends(get_db
 
 @router.get("/check-username", response_model=UsernameCheckResponse)
 def check_username(username: str, db: Session = Depends(get_db)):
+    """
+    Check username availability dynamically.
+
+    Queries the database case-insensitively using SQLAlchemy `ilike` to verify if
+    the target username is already claimed by another user. Useful for live front-end input validation.
+
+    - **username**: Target username string to check.
+    - **return**: Availability status as boolean in `UsernameCheckResponse`.
+    """
     user = db.query(User).filter(User.username.ilike(username)).first()
     return {"available": user is None}
 
@@ -181,6 +237,18 @@ def update_username(
     current_user: User = Depends(get_current_user), 
     db: Session = Depends(get_db)
 ):
+    """
+    Rename current authenticated user's username.
+
+    Validates that:
+    1. The target username is not empty.
+    2. The target username is not already taken by another user.
+    Once verified, updates the user username column in the relational database.
+
+    - **payload**: The target username payload.
+    - **current_user**: Authed User dependency.
+    - **return**: Confirmation message.
+    """
     new_username = payload.username.strip()
     if not new_username:
         raise HTTPException(status_code=400, detail="Username cannot be empty")
@@ -198,6 +266,15 @@ def update_username(
 
 @router.get("/me", response_model=UserResponse)
 def get_me(current_user: User = Depends(get_current_user)):
+    """
+    Get profile information of the current logged-in user.
+
+    Returns primary attributes of the user profile including username, email, role,
+    registration timestamp, and a redacted indicator showing if a GitHub integration token is linked.
+
+    - **current_user**: Authenticated User.
+    - **return**: User profile attributes matching UserResponse schema.
+    """
     return {
         "id": current_user.id,
         "username": current_user.username,
@@ -210,6 +287,14 @@ def get_me(current_user: User = Depends(get_current_user)):
 
 @router.get("/users", response_model=List[UserResponse])
 def list_users(current_user: User = Depends(get_current_admin), db: Session = Depends(get_db)):
+    """
+    List all user accounts in the database (Admin Only).
+
+    Queries and returns profile details of all registered users. Access is protected by the `get_current_admin` dependency which ensures the current authenticated user's role equals 'admin'.
+
+    - **current_user**: Authenticated Admin User.
+    - **return**: List of user profiles.
+    """
     users = db.query(User).all()
     return [
         {
@@ -227,6 +312,14 @@ def list_users(current_user: User = Depends(get_current_admin), db: Session = De
 
 @router.get("/github/login")
 def github_login():
+    """
+    Generate GitHub OAuth authorization redirect URL.
+
+    Constructs and returns the GitHub OAuth URL with requested scopes ('repo', 'user') 
+    and configurations to initiate authentication from the frontend client.
+
+    - **return**: OAuth redirect URL.
+    """
     if not GITHUB_CLIENT_ID:
         raise HTTPException(status_code=500, detail="GitHub Client ID not configured")
     
@@ -240,6 +333,16 @@ def github_login():
 
 @router.get("/github/callback")
 async def github_callback(code: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """
+    Handle GitHub OAuth callback parameter and link access token.
+
+    Exchanges the temporary `code` for an OAuth Access Token from GitHub's servers,
+    encrypts the token using Fernet symmetric encryption, and persists it on the authenticated user model.
+
+    - **code**: Temporary authentication code returned from GitHub OAuth.
+    - **current_user**: Authed User context.
+    - **return**: Connection success message.
+    """
     if not GITHUB_CLIENT_ID or not GITHUB_CLIENT_SECRET:
         raise HTTPException(status_code=500, detail="GitHub OAuth not configured")
 
@@ -270,6 +373,15 @@ async def github_callback(code: str, current_user: User = Depends(get_current_us
 
 @router.post("/github/disconnect")
 def github_disconnect(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """
+    Disconnect GitHub account integration.
+
+    Clears the encrypted `github_token` field from the database for the active user. 
+    This revokes the backend agent's authority to act on behalf of the user's GitHub account.
+
+    - **current_user**: Authenticated User.
+    - **return**: Disconnection success message.
+    """
     current_user.github_token = None
     db.commit()
     return {"message": "GitHub account disconnected successfully"}

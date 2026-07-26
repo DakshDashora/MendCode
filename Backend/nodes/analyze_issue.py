@@ -6,6 +6,14 @@ from llm.provider import get_llm
 def analyze_issue_node(
     state: IssueState,
 ) -> IssueState:
+    """
+    LangGraph execution node: Analyze GitHub Issue context.
+
+    Invokes the LLM using a structured schema (`IssueAnalysis`) to parse the issue text
+    into concrete data properties: summary, expected behavior, acceptance criteria checklist,
+    suspected system component labels, open questions, and search terms. Sets progress step
+    status to 'issue_analyzed'.
+    """
     state.console_logs.append("[INFO] Analyzing issue context and establishing acceptance criteria...")
     llm = get_llm(state.llm_provider)
     structured_llm = llm.with_structured_output(

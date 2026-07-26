@@ -16,14 +16,18 @@ It features a high-contrast, developer-first layout inspired by GitHub's aesthet
 
 ## ✨ Features
 
-1. **Multi-Page Layout**: Professional navbar, footer, client route guards, and tabbed dashboard.
+1. **Multi-Page Layout**: Professional navbar with in-site navigation links (Home, Dashboard, How It Works), footer, client route guards, and tabbed dashboard.
 2. **Dual Authentication Options**: Sign in or register via **Email with OTP verification** (printed to console or dispatched via SMTP) or one-click **Sign in with Google**.
-3. **User Profile Management**: Live debounced checking (400ms delay) to ensure username availability, custom profile renaming, and GitHub profile connections.
+3. **User Profile Management**: Live debounced checking (400ms delay) to ensure username availability, custom profile page, and GitHub profile connections.
 4. **GitHub Integration Hook**: Direct OAuth callback linking, token encryption, and profile decoupling.
 5. **Real-Time Log Stream**: Integrates LangGraph value streaming (`app.stream(..., stream_mode="values")`) to feed node progress events and execution console logs to the UI terminal instantly.
 6. **Agent Stepper Progress**: Dynamic pipeline layout showing completed steps (green check), active step (cyan spinner with pulsate description), and pending steps.
 7. **Code Diff Viewer**: Side-by-side modifications view with green additions, red deletions, edit overrides, and path cropping.
 8. **PR Success Overlay**: Triggered modal offering immediate redirects to the generated pull request branch on GitHub.
+9. **How MendCode Works**: A dedicated interactive pipeline page depicting the 11-step LangGraph workflow with collapsible nodes, system vs. LLM indicators, retry loops, and human-in-the-loop badges.
+10. **Workspace Codebase Explorer**: A collapsible file browser tree with file-type icons and built-in editor allowing users to review and modify the cloned codebase workspace directly.
+11. **Self-Healing Ephemeral Workspace Restorer**: Detects missing workspace directories (caused by server sleep cycles or disk resets on hosts like Render) and automatically re-clones the target repository, applying all user-approved database patches to reconstruct the exact development workspace state on-the-fly.
+12. **Automatic Workspace Cleanup & Scheduler**: Integrates a background thread daemon checking for inactive workspace clones periodically. Deletes clones 2 days after job finish (success/failure), dispatches warning emails for 30-day inactive drafts, and automatically clears them after an additional 10 days of inactivity.
 
 ---
 
@@ -121,7 +125,8 @@ SMTP_FROM = your-email@gmail.com
 GEMINI_API_KEY = <your-google-gemini-key>
 GROQ_API_KEY = <your-groq-api-key>
 
-
+# CORS Security Origin Checks (Optional, defaults to http://localhost:5173)
+FRONTEND_URL = http://localhost:5173
 ```
 
 ### Frontend (`frontend/.env`)

@@ -1,0 +1,396 @@
+/* ============================================================
+   HowItWorks.css  –  MendCode Flat Slate Pipeline Visuals
+   ============================================================ */
+
+/* ── Page Entrance Animation ──────────────────────────────── */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(253, 140, 115, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(253, 140, 115, 0);
+  }
+}
+
+.hiw-page {
+  max-width: 800px;
+  margin: 0 auto;
+  padding: 50px 24px 80px;
+  animation: fadeInUp 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* ── Hero Header ─────────────────────────────────────────── */
+.hiw-hero {
+  text-align: center;
+  margin-bottom: 50px;
+}
+
+.hiw-hero-title {
+  font-family: var(--font-title);
+  font-size: 2.4rem;
+  font-weight: 800;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+  margin-bottom: 12px;
+}
+
+.hiw-hero-title span {
+  color: var(--accent);
+}
+
+.hiw-hero-subtitle {
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  max-width: 620px;
+  margin: 0 auto;
+}
+
+/* ── Continuous Timeline Pipeline ───────────────────────── */
+.hiw-pipeline {
+  position: relative;
+  padding-left: 48px; /* space for the timeline backbone */
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+/* The vertical timeline backbone line */
+.hiw-pipeline::before {
+  content: '';
+  position: absolute;
+  left: 17px; /* horizontally centered with the step badge/icon */
+  top: 10px;
+  bottom: 10px;
+  width: 2px;
+  background-color: var(--border);
+  z-index: 1;
+}
+
+/* ── Node Card Wrapper ──────────────────────────────────── */
+.hiw-node {
+  position: relative;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, transform 0.2s ease;
+  z-index: 2; /* Sit on top of backbone line */
+}
+
+.hiw-node:hover {
+  border-color: var(--border-hover);
+  transform: translateX(2px);
+  box-shadow: var(--shadow-sm);
+}
+
+.hiw-node.hiw-node--expanded {
+  border-color: var(--accent);
+}
+
+/* ── Left Node Marker (Sits on the Backbone Line) ────────── */
+.hiw-marker-container {
+  position: absolute;
+  left: -48px;
+  top: 18px;
+  width: 36px;
+  display: flex;
+  justify-content: center;
+  z-index: 3;
+}
+
+.hiw-step-badge {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: var(--bg-app);
+  border: 2px solid var(--border);
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.2s, color 0.2s, background-color 0.2s;
+}
+
+.hiw-node:hover .hiw-step-badge {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-glow);
+}
+
+.hiw-node--expanded .hiw-step-badge {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-glow);
+}
+
+/* ── Node Header ────────────────────────────────────────── */
+.hiw-node-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 20px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.hiw-node-info {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  flex: 1;
+}
+
+.hiw-node-icon {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  transition: color 0.2s;
+}
+
+.hiw-node:hover .hiw-node-icon {
+  color: var(--accent);
+}
+
+.hiw-node--expanded .hiw-node-icon {
+  color: var(--accent);
+}
+
+.hiw-node-text {
+  min-width: 0;
+}
+
+.hiw-node-title {
+  font-family: var(--font-sans);
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.hiw-node-subtitle {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Expand Button */
+.hiw-expand-btn {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--bg-app);
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), background 0.2s, color 0.2s, border-color 0.2s;
+}
+
+.hiw-node-header:hover .hiw-expand-btn {
+  border-color: var(--border-hover);
+  color: var(--text-primary);
+}
+
+.hiw-expand-btn--open {
+  transform: rotate(45deg);
+  background: var(--accent-glow);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+/* ── Collapsible Details ────────────────────────────────── */
+.hiw-node-detail {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.35s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s;
+  opacity: 0;
+}
+
+.hiw-node-detail--open {
+  max-height: 260px;
+  opacity: 1;
+}
+
+.hiw-node-detail-inner {
+  padding: 0 20px 20px 48px; /* Alignment line offsets */
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.hiw-detail-text {
+  font-size: 0.85rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+}
+
+/* ── Badges Row ──────────────────────────────────────────── */
+.hiw-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.hiw-badge {
+  font-family: var(--font-mono);
+  font-size: 0.65rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.hiw-badge--llm {
+  background: rgba(168, 85, 247, 0.08);
+  color: #a855f7;
+  border: 1px solid rgba(168, 85, 247, 0.2);
+}
+
+.hiw-badge--system {
+  background: var(--accent-glow);
+  color: var(--accent);
+  border: 1px solid var(--accent-border);
+}
+
+.hiw-badge--llmsystem {
+  background: rgba(6, 182, 212, 0.08);
+  color: #06b6d4;
+  border: 1px solid rgba(6, 182, 212, 0.2);
+}
+
+.hiw-badge--retry {
+  background: rgba(249, 115, 22, 0.08);
+  color: #f97316;
+  border: 1px solid rgba(249, 115, 22, 0.2);
+}
+
+.hiw-badge--branch {
+  background: rgba(234, 179, 8, 0.08);
+  color: #eab308;
+  border: 1px solid rgba(234, 179, 8, 0.2);
+}
+
+.hiw-badge--human {
+  background: rgba(239, 68, 68, 0.08);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.25);
+  font-weight: 700;
+  animation: pulseGlow 2s infinite ease-in-out;
+}
+
+/* ── CTA Footer ──────────────────────────────────────────── */
+.hiw-cta {
+  text-align: center;
+  margin-top: 50px;
+  padding-top: 40px;
+  border-top: 1px solid var(--border);
+}
+
+.hiw-cta-title {
+  font-family: var(--font-sans);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.hiw-cta-subtitle {
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+  margin-bottom: 24px;
+}
+
+.hiw-cta-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 28px;
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  font-weight: 600;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: #fff;
+  border: 1px solid var(--accent);
+  text-decoration: none;
+  transition: background 0.15s, border-color 0.15s, transform 0.15s;
+}
+
+.hiw-cta-btn:hover {
+  background: var(--accent-hover, #fc7a5e);
+  border-color: var(--accent-hover, #fc7a5e);
+  transform: translateY(-1px);
+}
+
+/* ── Delays ─────────────────────────────────────────────── */
+.hiw-node:nth-child(1)  { animation-delay: 0.05s; }
+.hiw-node:nth-child(2)  { animation-delay: 0.08s; }
+.hiw-node:nth-child(3)  { animation-delay: 0.11s; }
+.hiw-node:nth-child(4)  { animation-delay: 0.14s; }
+.hiw-node:nth-child(5)  { animation-delay: 0.17s; }
+.hiw-node:nth-child(6)  { animation-delay: 0.20s; }
+.hiw-node:nth-child(7)  { animation-delay: 0.23s; }
+.hiw-node:nth-child(8)  { animation-delay: 0.26s; }
+.hiw-node:nth-child(9)  { animation-delay: 0.29s; }
+.hiw-node:nth-child(10) { animation-delay: 0.32s; }
+.hiw-node:nth-child(11) { animation-delay: 0.35s; }
+
+/* ── Responsive breakpoints ────────────────────────────── */
+@media (max-width: 640px) {
+  .hiw-page {
+    padding: 30px 16px 60px;
+  }
+
+  .hiw-hero-title {
+    font-size: 1.8rem;
+  }
+
+  .hiw-pipeline {
+    padding-left: 36px;
+  }
+
+  .hiw-pipeline::before {
+    left: 11px;
+  }
+
+  .hiw-marker-container {
+    left: -36px;
+    width: 24px;
+  }
+
+  .hiw-step-badge {
+    width: 20px;
+    height: 20px;
+    font-size: 0.65rem;
+  }
+
+  .hiw-node-detail-inner {
+    padding: 0 16px 16px 32px;
+  }
+}

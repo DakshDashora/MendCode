@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Github, Play, RefreshCw, Terminal, CheckCircle2, AlertTriangle, Layers, GitPullRequest, AlertCircle } from 'lucide-react';
+import React, { useState } from 'react';
+import { Github, Play, RefreshCw, Terminal, CheckCircle2, AlertTriangle, Layers, GitPullRequest, AlertCircle, Trash2 } from 'lucide-react';
 import type { User, Job } from '../types';
 import { API_BASE_URL } from '../config';
 
@@ -27,7 +27,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
   onSubmitJob,
   onJobClick,
 }) => {
-  const [activeTab, setActiveTab] = useState<'history' | 'solve' | 'profile'>('history');
+  const [activeTab, setActiveTab] = useState<'history' | 'solve'>('history');
   
   // Solve New Issue Form State
   const [issueUrl, setIssueUrl] = useState('');
@@ -38,71 +38,31 @@ export const Dashboard: React.FC<DashboardProps> = ({
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Profile Username Edit State
-  const [newUsername, setNewUsername] = useState(user?.username || '');
-  const [usernameAvailable, setUsernameAvailable] = useState<boolean | null>(null);
-  const [checkingUsername, setCheckingUsername] = useState(false);
-  const [usernameUpdateError, setUsernameUpdateError] = useState<string | null>(null);
-  const [usernameUpdateSuccess, setUsernameUpdateSuccess] = useState<string | null>(null);
+  // Custom Delete Confirmation Modal State
+  const [deleteConfirmJobId, setDeleteConfirmJobId] = useState<string | null>(null);
+  const [deletingJob, setDeletingJob] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
-  useEffect(() => {
-    setNewUsername(user?.username || '');
-  }, [user]);
-
-  // Debounced username availability check
-  useEffect(() => {
-    if (!newUsername || newUsername.trim() === '' || newUsername === user?.username) {
-      setUsernameAvailable(null);
-      return;
-    }
-
-    setCheckingUsername(true);
-    const delayDebounce = setTimeout(async () => {
-      try {
-        const response = await fetch(`${API_BASE_URL}/auth/check-username?username=${encodeURIComponent(newUsername.trim())}`);
-        if (response.ok) {
-          const data = await response.json();
-          setUsernameAvailable(data.available);
-        }
-      } catch (err) {
-        console.error('Error checking username', err);
-      } finally {
-        setCheckingUsername(false);
-      }
-    }, 400);
-
-    return () => clearTimeout(delayDebounce);
-  }, [newUsername, user?.username]);
-
-  const handleUpdateUsername = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setUsernameUpdateError(null);
-    setUsernameUpdateSuccess(null);
-
-    if (!newUsername || newUsername.trim() === '') {
-      setUsernameUpdateError('Username cannot be empty');
-      return;
-    }
-
+  const handleConfirmDelete = async () => {
+    if (!deleteConfirmJobId) return;
+    setDeletingJob(true);
+    setDeleteError(null);
     try {
-      const response = await fetch(`${API_BASE_URL}/auth/username`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({ username: newUsername.trim() }),
+      const res = await fetch(`${API_BASE_URL}/jobs/${deleteConfirmJobId}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` }
       });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.detail || 'Failed to update username');
+      if (res.ok) {
+        onRefresh();
+        setDeleteConfirmJobId(null);
+      } else {
+        const data = await res.json();
+        setDeleteError(data.detail || "Failed to delete job.");
       }
-
-      setUsernameUpdateSuccess('Username updated successfully!');
-      onRefresh();
     } catch (err: any) {
-      setUsernameUpdateError(err.message || 'Error updating username');
+      setDeleteError(err.message || String(err));
+    } finally {
+      setDeletingJob(false);
     }
   };
 
@@ -204,12 +164,6 @@ export const Dashboard: React.FC<DashboardProps> = ({
         >
           Solve New Issue
         </button>
-        <button 
-          onClick={() => setActiveTab('profile')} 
-          className={`tab-btn ${activeTab === 'profile' ? 'active' : ''}`}
-        >
-          My Profile
-        </button>
       </div>
 
       {/* TAB CONTENT: HISTORY */}
@@ -287,7 +241,7 @@ export const Dashboard: React.FC<DashboardProps> = ({
                       </div>
                     </div>
 
-                    <div className="job-status-area">
+                    <div className="job-status-area" style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                       {job.pr_url && (
                         <a 
                           href={job.pr_url} 
@@ -300,6 +254,29 @@ export const Dashboard: React.FC<DashboardProps> = ({
                         </a>
                       )}
                       {getStatusBadge(job.status)}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setDeleteConfirmJobId(job.id);
+                        }}
+                        className="btn"
+                        style={{
+                          padding: '5px 8px',
+                          fontSize: '0.75rem',
+                          background: 'rgba(239, 68, 68, 0.08)',
+                          border: '1px solid rgba(239, 68, 68, 0.2)',
+                          color: '#ef4444',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          marginLeft: '4px'
+                        }}
+                        title="Delete run and free quota"
+                      >
+                        <Trash2 size={12} />
+                      </button>
                     </div>
                   </div>
                 ))}
@@ -316,6 +293,26 @@ export const Dashboard: React.FC<DashboardProps> = ({
           <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '24px' }}>
             Provide repository locations and a target issue number. The agent will run checkout and surgical modifications.
           </p>
+
+          {/* Quota Limits Notice */}
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            background: 'var(--border)',
+            padding: '12px 16px',
+            borderRadius: 'var(--radius)',
+            marginBottom: '24px',
+            fontSize: '0.85rem',
+            border: '1px solid rgba(255,255,255,0.05)'
+          }}>
+            <span style={{ color: 'var(--text-secondary)', display: 'flex', gap: '6px', alignItems: 'center' }}>
+              Daily Allowance: <strong style={{ color: 'var(--accent)' }}>5 jobs / day</strong>
+            </span>
+            <span style={{ color: 'var(--text-secondary)', display: 'flex', gap: '6px', alignItems: 'center' }}>
+              Active Concurrency: <strong style={{ color: 'var(--accent)' }}>Max 2 running</strong>
+            </span>
+          </div>
 
           {/* GitHub Connection warning */}
           {user && !user.github_token ? (
@@ -432,125 +429,66 @@ export const Dashboard: React.FC<DashboardProps> = ({
         </div>
       )}
 
-      {/* TAB CONTENT: MY PROFILE */}
-      {activeTab === 'profile' && (
-        <div className="glass-panel" style={{ maxWidth: '640px', margin: '0 auto' }}>
-          <h3 style={{ fontSize: '1.4rem', marginBottom: '8px' }}>My Profile</h3>
-          <p style={{ color: 'var(--text-secondary)', fontSize: '0.9rem', marginBottom: '24px' }}>
-            Manage your credentials, branding name, and GitHub authentication connections.
-          </p>
-
-          {/* User metadata */}
-          <div style={{ padding: '16px', background: 'var(--border)', borderRadius: 'var(--radius)', marginBottom: '24px' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Email Address</span>
-              <span style={{ fontWeight: 700 }}>{user?.email || 'N/A (Google Sign-In)'}</span>
+      {/* Custom Delete Confirmation Floating Toast Card */}
+      {deleteConfirmJobId && (
+        <div style={{
+          position: 'fixed',
+          bottom: '24px',
+          right: '24px',
+          zIndex: 1100,
+          maxWidth: '380px',
+          width: 'calc(100% - 48px)',
+          background: 'var(--bg-card)',
+          backdropFilter: 'blur(16px)',
+          border: '1px solid var(--border)',
+          borderRadius: 'var(--radius)',
+          boxShadow: '0 12px 32px rgba(0, 0, 0, 0.45)',
+          padding: '20px',
+          animation: 'slideUp 0.2s ease-out',
+        }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', textAlign: 'left' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontWeight: 700, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
+              <AlertTriangle size={16} color="var(--accent)" />
+              Cancel & Delete Run?
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-              <span style={{ fontWeight: 600, color: 'var(--text-secondary)' }}>Current Username</span>
-              <span style={{ fontWeight: 700 }}>{user?.username}</span>
-            </div>
-          </div>
-
-          {/* Username edit form with live check */}
-          <form onSubmit={handleUpdateUsername} style={{ marginBottom: '32px', borderBottom: '1px solid var(--border)', paddingBottom: '24px' }}>
-            <h4 style={{ fontSize: '1.1rem', marginBottom: '16px' }}>Change Username</h4>
-            
-            {usernameUpdateError && (
-              <div className="alert alert-danger" style={{ marginBottom: '16px' }}>
-                <AlertCircle size={16} />
-                <span>{usernameUpdateError}</span>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '0.78rem', margin: 0, lineHeight: '1.4' }}>
+              Are you sure? This will immediately delete all workspace files from the disk and release your active quota slot.
+            </p>
+            {deleteError && (
+              <div className="alert alert-danger" style={{ margin: '4px 0 0', fontSize: '0.75rem', padding: '6px 10px' }}>
+                <AlertCircle size={14} />
+                <span>{deleteError}</span>
               </div>
             )}
-
-            {usernameUpdateSuccess && (
-              <div className="alert alert-success" style={{ marginBottom: '16px' }}>
-                <CheckCircle2 size={16} />
-                <span>{usernameUpdateSuccess}</span>
-              </div>
-            )}
-
-            <div className="form-group">
-              <label className="form-label" htmlFor="profile-username">
-                New Username
-              </label>
-              <div style={{ position: 'relative' }}>
-                <input
-                  id="profile-username"
-                  type="text"
-                  className="form-input"
-                  style={{ width: '100%' }}
-                  placeholder="Enter new username"
-                  value={newUsername}
-                  onChange={(e) => setNewUsername(e.target.value)}
-                  disabled={loading}
-                />
-              </div>
-
-              {/* Live username availability indicator */}
-              <div style={{ marginTop: '8px', minHeight: '20px', fontSize: '0.85rem' }}>
-                {checkingUsername && (
-                  <span style={{ color: 'var(--text-secondary)' }}>Checking availability...</span>
-                )}
-                {!checkingUsername && usernameAvailable === true && (
-                  <span style={{ color: '#22c55e', fontWeight: 600 }}>✓ Username is available</span>
-                )}
-                {!checkingUsername && usernameAvailable === false && (
-                  <span style={{ color: '#ef4444', fontWeight: 600 }}>✗ Username is already taken</span>
-                )}
-              </div>
+            <div style={{ display: 'flex', gap: '8px', marginTop: '8px', justifyContent: 'flex-end' }}>
+              <button 
+                type="button"
+                onClick={() => {
+                  setDeleteConfirmJobId(null);
+                  setDeleteError(null);
+                }}
+                className="btn btn-secondary"
+                disabled={deletingJob}
+                style={{ padding: '6px 12px', fontSize: '0.75rem' }}
+              >
+                Cancel
+              </button>
+              <button 
+                type="button"
+                onClick={handleConfirmDelete}
+                className="btn"
+                disabled={deletingJob}
+                style={{
+                  padding: '6px 12px',
+                  fontSize: '0.75rem',
+                  background: '#ef4444',
+                  borderColor: '#ef4444',
+                  color: 'white'
+                }}
+              >
+                {deletingJob ? 'Deleting...' : 'Delete'}
+              </button>
             </div>
-
-            <button
-              type="submit"
-              className="btn btn-primary"
-              style={{ padding: '8px 16px' }}
-              disabled={loading || usernameAvailable === false || newUsername.trim() === '' || newUsername === user?.username}
-            >
-              Save Username
-            </button>
-          </form>
-
-          {/* GitHub Connection Status */}
-          <div>
-            <h4 style={{ fontSize: '1.1rem', marginBottom: '16px' }}>GitHub Integration</h4>
-            {user && !user.github_token ? (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>Disconnect / Link GitHub profile</span>
-                <button onClick={handleGithubConnect} className="btn btn-primary">
-                  <Github size={16} /> Link GitHub Profile
-                </button>
-              </div>
-            ) : (
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <span style={{ color: '#22c55e', fontWeight: 600, display: 'block', fontSize: '0.95rem' }}>Connected</span>
-                  <span style={{ color: 'var(--text-secondary)', fontSize: '0.8rem' }}>MendCode is authorized to open Pull Requests on your behalf.</span>
-                </div>
-                <button 
-                  type="button"
-                  onClick={async () => {
-                    if (confirm("Disconnect GitHub account?")) {
-                      try {
-                        const response = await fetch(`${API_BASE_URL}/auth/github/disconnect`, {
-                          method: 'POST',
-                          headers: { Authorization: `Bearer ${token}` }
-                        });
-                        if (response.ok) {
-                          onRefresh();
-                        }
-                      } catch (err) {
-                        alert(err);
-                      }
-                    }
-                  }} 
-                  className="btn" 
-                  style={{ background: 'var(--border)', borderColor: 'var(--border)', color: '#ef4444' }}
-                >
-                  Disconnect
-                </button>
-              </div>
-            )}
           </div>
         </div>
       )}

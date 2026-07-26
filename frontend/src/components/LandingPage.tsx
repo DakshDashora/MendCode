@@ -1,11 +1,15 @@
 import React from 'react';
-import { ArrowRight, Terminal, GitBranch, ShieldCheck, Cpu } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
+import { ArrowRight, Terminal, GitBranch, ShieldCheck, Cpu, Workflow } from 'lucide-react';
 
 interface LandingPageProps {
   onGetStartedClick: () => void;
+  isLoggedIn?: boolean;
 }
 
-export const LandingPage: React.FC<LandingPageProps> = ({ onGetStartedClick }) => {
+export const LandingPage: React.FC<LandingPageProps> = ({ onGetStartedClick, isLoggedIn }) => {
+  const navigate = useNavigate();
+
   return (
     <div className="landing-wrapper">
       <section className="landing-hero">
@@ -18,9 +22,20 @@ export const LandingPage: React.FC<LandingPageProps> = ({ onGetStartedClick }) =
         <p className="landing-subtitle">
           Connect your GitHub repository and let our agent analyze issues, locate bugs, draft code adjustments, run validation checks, and open PRs automatically.
         </p>
-        <button onClick={onGetStartedClick} className="btn btn-primary" style={{ padding: '14px 28px', fontSize: '1rem' }}>
-          Get Started <ArrowRight size={18} />
-        </button>
+        <div style={{ display: 'flex', gap: '14px', alignItems: 'center', justifyContent: 'center', flexWrap: 'wrap' }}>
+          {isLoggedIn ? (
+            <button onClick={() => navigate('/dashboard')} className="btn btn-primary" style={{ padding: '14px 28px', fontSize: '1rem' }}>
+              Visit Dashboard <ArrowRight size={18} />
+            </button>
+          ) : (
+            <button onClick={onGetStartedClick} className="btn btn-primary" style={{ padding: '14px 28px', fontSize: '1rem' }}>
+              Get Started <ArrowRight size={18} />
+            </button>
+          )}
+          <Link to="/how-it-works" className="btn btn-secondary" style={{ padding: '14px 28px', fontSize: '1rem', display: 'inline-flex', alignItems: 'center', gap: '8px', textDecoration: 'none' }}>
+            <Workflow size={18} /> How It Works
+          </Link>
+        </div>
       </section>
 
       <section className="features-grid">
