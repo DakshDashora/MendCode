@@ -3,6 +3,13 @@ from tools.github.client import GitHubClient
 
 
 def fetch_issue_node(state: IssueState) -> IssueState:
+    """
+    LangGraph execution node: Fetch GitHub Issue context.
+
+    Invokes GitHubClient using the encrypted OAuth token. Queries the issue title, body,
+    and associated comments to construct the raw developer context. Sets the execution progress 
+    state status to 'issue_fetched'.
+    """
     state.console_logs.append(f"[INFO] Connecting to GitHub repository: {state.repo_owner}/{state.repo_name}...")
     client = GitHubClient(
         owner=state.repo_owner,

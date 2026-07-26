@@ -6,7 +6,14 @@ from dotenv import load_dotenv
 
 load_dotenv(override=True)
 
-WORKSPACE_DIR = Path("workspace/repos")
+BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+WORKSPACE_DIR = BACKEND_DIR / "workspace" / "repos"
+
+GIT_ENV = {
+    **os.environ,
+    "GIT_TERMINAL_PROMPT": "0",
+    "GIT_ASKPASS": "true"
+}
 
 
 def clone_repository(
@@ -43,20 +50,21 @@ def clone_repository(
                 str(repo_path),
             ],
             check=True,
+            env=GIT_ENV,
         )
 
     else:
         # Fetch and reset to ensure we are on a clean, up-to-date main branch
-        subprocess.run(cmd_base + ["-C", str(repo_path), "fetch", "origin"], check=True)
+        subprocess.run(cmd_base + ["-C", str(repo_path), "fetch", "origin"], check=True, env=GIT_ENV)
         
         # Try to checkout main, fallback to master if needed
         try:
-            subprocess.run(["git", "-C", str(repo_path), "checkout", "main"], check=True, capture_output=True)
+            subprocess.run(["git", "-C", str(repo_path), "checkout", "main"], check=True, capture_output=True, env=GIT_ENV)
         except subprocess.CalledProcessError:
-            subprocess.run(["git", "-C", str(repo_path), "checkout", "master"], check=True)
+            subprocess.run(["git", "-C", str(repo_path), "checkout", "master"], check=True, env=GIT_ENV)
 
         # Get default branch remote tracking name
-        branch_r = subprocess.run(["git", "-C", str(repo_path), "branch", "-r"], capture_output=True, text=True).stdout
+        branch_r = subprocess.run(["git", "-C", str(repo_path), "branch", "-r"], capture_output=True, text=True, env=GIT_ENV).stdout
         target_branch = "origin/main" if "origin/main" in branch_r else "origin/master"
 
         subprocess.run(
@@ -69,6 +77,7 @@ def clone_repository(
                 target_branch
             ],
             check=True,
+            env=GIT_ENV,
         )
 
     return str(repo_path.resolve())

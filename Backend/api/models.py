@@ -38,6 +38,8 @@ class Job(Base):
     approved_changes = Column(Text, nullable=True)  # JSON string of changes
     error_message = Column(Text, nullable=True)
     console_logs = Column(Text, nullable=True)  # JSON string of logs
+    delete_warning_sent = Column(Boolean, default=False, nullable=False)
+    warning_sent_at = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 

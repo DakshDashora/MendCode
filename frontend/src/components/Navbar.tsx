@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Sun, Moon, LogOut, Github, Shield, Calendar, AlertTriangle } from 'lucide-react';
+import { useNavigate, useLocation, Link } from 'react-router-dom';
+import { Sun, Moon, LogOut, Github, Shield, Calendar, AlertTriangle, User as UserIcon } from 'lucide-react';
 import type { User } from '../types';
 import { API_BASE_URL } from '../config';
 
@@ -30,6 +30,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   const profileRef = useRef<HTMLDivElement>(null);
   const githubRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const location = useLocation();
 
   // Close dropdowns on outside clicks
   useEffect(() => {
@@ -83,13 +84,24 @@ export const Navbar: React.FC<NavbarProps> = ({
     }
   };
 
+  const isActive = (path: string) => location.pathname === path;
+
   return (
     <nav className="navbar">
-      <div className="nav-brand" onClick={() => navigate(user ? '/dashboard' : '/')}>
-        <div className="nav-logo-icon">
-          <img src="/favicon.png" alt="MendCode Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: '32px' }}>
+        <div className="nav-brand" onClick={() => navigate('/')}>
+          <div className="nav-logo-icon">
+            <img src="/favicon.png" alt="MendCode Logo" style={{ width: '100%', height: '100%', objectFit: 'contain' }} />
+          </div>
+          <span className="nav-title">MendCode</span>
         </div>
-        <span className="nav-title">MendCode</span>
+
+        {/* Navigation Links */}
+        <div className="nav-links">
+          <Link to="/" className={`nav-link ${isActive('/') ? 'active' : ''}`}>Home</Link>
+          {user && <Link to="/dashboard" className={`nav-link ${isActive('/dashboard') ? 'active' : ''}`}>Dashboard</Link>}
+          <Link to="/how-it-works" className={`nav-link ${isActive('/how-it-works') ? 'active' : ''}`}>How It Works</Link>
+        </div>
       </div>
 
       <div className="nav-actions">
@@ -174,6 +186,17 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <div className="dropdown-item-info" style={{ display: 'flex', alignItems: 'center', gap: '8px', borderBottom: '1px solid var(--input-border)', paddingBottom: '12px', marginBottom: '12px' }}>
                     <Calendar size={14} /> <span>Joined: {new Date(user.created_at).toLocaleDateString()}</span>
                   </div>
+
+                  <button 
+                    onClick={() => {
+                      setProfileOpen(false);
+                      navigate('/profile');
+                    }} 
+                    className="btn btn-secondary" 
+                    style={{ width: '100%', padding: '8px 12px', display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}
+                  >
+                    <UserIcon size={14} /> My Profile
+                  </button>
 
                   <button 
                     onClick={() => {

@@ -1,7 +1,177 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, GitPullRequest, AlertCircle, Clock, FileText, Settings, Database, Check, Loader2, X as XIcon, Sparkles } from 'lucide-react';
+import {
+  ArrowLeft,
+  GitPullRequest,
+  AlertCircle,
+  Clock,
+  FileText,
+  Settings,
+  Database,
+  Check,
+  Loader2,
+  X as XIcon,
+  Sparkles,
+  Folder,
+  FolderOpen,
+  ChevronRight,
+  FileCode2,
+  FileCode,
+  FileJson,
+  Palette,
+  Globe,
+  Lock,
+  File,
+  FileText as FileTextIcon
+} from 'lucide-react';
 import type { Job } from '../types';
 import { API_BASE_URL } from '../config';
+
+interface TreeNode {
+  name: string;
+  path: string;
+  is_dir: boolean;
+  children: Record<string, TreeNode>;
+}
+
+const getFileIcon = (name: string, isDir: boolean, isExpanded: boolean) => {
+  if (isDir) {
+    return {
+      Icon: isExpanded ? FolderOpen : Folder,
+      className: 'tree-icon-folder'
+    };
+  }
+  
+  const ext = name.split('.').pop()?.toLowerCase();
+  if (ext === 'ts' || ext === 'tsx') {
+    return { Icon: FileCode2, className: 'tree-icon-ts' };
+  }
+  if (ext === 'js' || ext === 'jsx') {
+    return { Icon: FileCode2, className: 'tree-icon-js' };
+  }
+  if (ext === 'py') {
+    return { Icon: FileCode, className: 'tree-icon-py' };
+  }
+  if (['json', 'yaml', 'yml', 'toml'].includes(ext || '')) {
+    return { Icon: FileJson, className: 'tree-icon-json' };
+  }
+  if (ext === 'css' || ext === 'scss') {
+    return { Icon: Palette, className: 'tree-icon-css' };
+  }
+  if (ext === 'html') {
+    return { Icon: Globe, className: 'tree-icon-html' };
+  }
+  if (name.startsWith('.env')) {
+    return { Icon: Lock, className: 'tree-icon-env' };
+  }
+  if (ext === 'md' || ext === 'txt') {
+    return { Icon: FileTextIcon, className: 'tree-icon-md' };
+  }
+  return { Icon: File, className: 'tree-icon-default' };
+};
+
+const buildTree = (items: Array<{ path: string; is_dir: boolean }>) => {
+  const root: TreeNode = { name: 'root', path: '', is_dir: true, children: {} };
+
+  items.forEach(item => {
+    const parts = item.path.split('/');
+    let current = root;
+    
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i];
+      const isLast = i === parts.length - 1;
+      const currentPath = parts.slice(0, i + 1).join('/');
+
+      if (!current.children[part]) {
+        current.children[part] = {
+          name: part,
+          path: currentPath,
+          is_dir: isLast ? item.is_dir : true,
+          children: {}
+        };
+      }
+      current = current.children[part];
+    }
+  });
+
+  return root;
+};
+
+interface FileTreeNodeProps {
+  node: TreeNode;
+  selectedFilePath: string | null;
+  expandedPaths: Record<string, boolean>;
+  onSelectFile: (path: string) => void;
+  onTogglePath: (path: string) => void;
+  level: number;
+}
+
+const FileTreeNodeComponent: React.FC<FileTreeNodeProps> = ({
+  node,
+  selectedFilePath,
+  expandedPaths,
+  onSelectFile,
+  onTogglePath,
+  level
+}) => {
+  const isExpanded = !!expandedPaths[node.path];
+  const isSelected = selectedFilePath === node.path;
+  
+  const { Icon, className } = getFileIcon(node.name, node.is_dir, isExpanded);
+
+  const sortedChildren = Object.values(node.children).sort((a, b) => {
+    if (a.is_dir && !b.is_dir) return -1;
+    if (!a.is_dir && b.is_dir) return 1;
+    return a.name.localeCompare(b.name);
+  });
+
+  const handleClick = () => {
+    if (node.is_dir) {
+      onTogglePath(node.path);
+    } else {
+      onSelectFile(node.path);
+    }
+  };
+
+  return (
+    <div className="tree-node" style={{ paddingLeft: level > 0 ? '8px' : '0px' }}>
+      {node.name !== 'root' && (
+        <button
+          onClick={handleClick}
+          className={`tree-node-row ${node.is_dir ? 'is-dir' : ''} ${isSelected ? 'selected' : ''}`}
+          type="button"
+        >
+          {node.is_dir ? (
+            <span className={`tree-toggle ${isExpanded ? 'expanded' : ''}`}>
+              <ChevronRight size={10} />
+            </span>
+          ) : (
+            <span className="tree-toggle hidden"></span>
+          )}
+          <span className={`tree-icon ${className}`}>
+            <Icon size={14} />
+          </span>
+          <span className="tree-label">{node.name}</span>
+        </button>
+      )}
+      
+      {node.is_dir && (node.name === 'root' || isExpanded) && sortedChildren.length > 0 && (
+        <div className={`tree-children ${node.name === 'root' || isExpanded ? 'expanded' : 'collapsed'}`}>
+          {sortedChildren.map((child, idx) => (
+            <FileTreeNodeComponent
+              key={idx}
+              node={child}
+              selectedFilePath={selectedFilePath}
+              expandedPaths={expandedPaths}
+              onSelectFile={onSelectFile}
+              onTogglePath={onTogglePath}
+              level={node.name === 'root' ? 0 : level + 1}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 interface JobDetailProps {
   job: Job;
@@ -24,6 +194,17 @@ const steps = [
   { key: 'pr_created', label: 'Submit Pull Request', desc: 'Commits changes, pushes branch, and opens a GitHub PR.' }
 ];
 
+/**
+ * JobDetail Component
+ * 
+ * Displays execution telemetry, progress indicator pipelines, and proposed codebase changes.
+ * Features:
+ * - A dynamic execution timeline/stepper mapping current nodes in the LangGraph loop.
+ * - Tabbed workspace views separating proposed modifications (diff view and manual override actions)
+ *   from a built-in safe file tree explorer.
+ * - Checkpoint interrupt approval controllers to commit file changes and create PRs.
+ * - Rolling terminal log boards streaming execution telemetry in real-time.
+ */
 export const JobDetail: React.FC<JobDetailProps> = ({ job, token, onBack, onRefresh }) => {
   const [approving, setApproving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -45,6 +226,14 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, token, onBack, onRefr
   const [editingFileContent, setEditingFileContent] = useState<string>('');
   const [savingWorkspaceFile, setSavingWorkspaceFile] = useState(false);
   const [explorerSuccessMsg, setExplorerSuccessMsg] = useState<string | null>(null);
+  const [expandedPaths, setExpandedPaths] = useState<Record<string, boolean>>({});
+
+  const togglePath = (path: string) => {
+    setExpandedPaths(prev => ({
+      ...prev,
+      [path]: !prev[path]
+    }));
+  };
 
   const fetchWorkspaceTree = async () => {
     setLoadingTree(true);
@@ -463,7 +652,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, token, onBack, onRefr
                   </div>
                 ) : (
                   <div className="changes-container">
-                    {job.approved_changes.map((change, index) => {
+                    {job.approved_changes!.map((change: any, index: number) => {
                       const original = change.original_content || '';
                       const updated = change.updated_content || '';
                       const diffLines = computeLineDiff(original, updated);
@@ -567,39 +756,15 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, token, onBack, onRefr
                   ) : workspaceTree.length === 0 ? (
                     <div style={{ color: 'var(--text-secondary)', fontSize: '0.85rem' }}>Workspace folder is empty or not yet cloned.</div>
                   ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-                      {workspaceTree.map((item, idx) => {
-                        const isSelected = selectedFilePath === item.path;
-                        return (
-                          <button
-                            key={idx}
-                            onClick={() => !item.is_dir && handleSelectFile(item.path)}
-                            disabled={item.is_dir}
-                            style={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              width: '100%',
-                              padding: '6px 10px',
-                              background: isSelected ? 'var(--accent-glow)' : 'transparent',
-                              border: 'none',
-                              borderRadius: 'var(--radius)',
-                              color: item.is_dir ? 'var(--text-secondary)' : isSelected ? 'var(--accent)' : 'var(--text-primary)',
-                              fontSize: '0.82rem',
-                              fontWeight: isSelected ? 700 : 400,
-                              cursor: item.is_dir ? 'default' : 'pointer',
-                              textAlign: 'left',
-                              paddingLeft: `${(item.path.split('/').length - 1) * 12 + 10}px`
-                            }}
-                          >
-                            <span style={{ marginRight: '8px' }}>
-                              {item.is_dir ? '📁' : '📄'}
-                            </span>
-                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                              {item.path.split('/').pop()}
-                            </span>
-                          </button>
-                        );
-                      })}
+                    <div className="tree-container">
+                      <FileTreeNodeComponent
+                        node={buildTree(workspaceTree)}
+                        selectedFilePath={selectedFilePath}
+                        expandedPaths={expandedPaths}
+                        onSelectFile={handleSelectFile}
+                        onTogglePath={togglePath}
+                        level={0}
+                      />
                     </div>
                   )}
                 </div>
@@ -748,7 +913,7 @@ export const JobDetail: React.FC<JobDetailProps> = ({ job, token, onBack, onRefr
                 {(!job.console_logs || job.console_logs.length === 0) ? (
                   <div className="log-line info">[INFO] Establishing agent host connection...</div>
                 ) : (
-                  job.console_logs.map((log, lIdx) => {
+                  job.console_logs!.map((log: string, lIdx: number) => {
                     let logType = 'info';
                     if (log.startsWith('[SUCCESS]')) logType = 'success';
                     else if (log.startsWith('[ERROR]')) logType = 'error';

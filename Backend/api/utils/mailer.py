@@ -155,3 +155,80 @@ def send_otp_email(to_email: str, otp: str):
         print(f"   Your OTP Code is:         {otp}")
         print("*" * 60 + "\n")
         return True
+
+def send_warning_email(to_email: str, repo_name: str, days_left: int = 10):
+    """
+    Sends a warning email informing the user that their workspace repo clone
+    will be deleted due to inactivity.
+    """
+    subject = f"MendCode Workspace Inactivity Warning: {repo_name}"
+    plain_body = f"Your MendCode workspace clone for '{repo_name}' has been inactive for 30 days. It will be deleted in {days_left} days if no updates are made."
+    
+    html_body = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <meta charset="utf-8">
+      <style>
+        body {{
+          margin: 0; padding: 0;
+          font-family: sans-serif;
+          background-color: #0f172a; color: #f8fafc;
+        }}
+        .container {{
+          max-width: 580px; margin: 40px auto; padding: 32px;
+          background-color: #1e293b; border-radius: 12px;
+          border: 1px solid #334155;
+        }}
+        .header {{ text-align: center; margin-bottom: 24px; }}
+        .title {{ color: #ef4444; font-size: 20px; font-weight: 700; }}
+        .content {{ font-size: 15px; line-height: 1.6; color: #cbd5e1; }}
+        .footer {{ text-align: center; font-size: 12px; color: #64748b; margin-top: 32px; border-top: 1px solid #334155; padding-top: 24px; }}
+      </style>
+    </head>
+    <body>
+      <div class="container">
+        <div class="header">
+          <div class="title">Workspace Inactivity Warning</div>
+        </div>
+        <div class="content">
+          <p>Hello,</p>
+          <p>Your MendCode local workspace clone for <strong>{repo_name}</strong> has been inactive for over 30 days.</p>
+          <p>To optimize disk storage on our server hosts, the workspace repository directories will be automatically cleaned up in <strong>{days_left} days</strong>.</p>
+          <p>If you wish to keep this workspace active, simply visit the dashboard and interact with the job or codebase explorer.</p>
+        </div>
+        <div class="footer">
+          <p>&copy; MendCode. All rights reserved.</p>
+        </div>
+      </div>
+    </body>
+    </html>
+    """
+
+    if all([SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD]):
+        try:
+            msg = MIMEMultipart("alternative")
+            msg["From"] = SMTP_FROM
+            msg["To"] = to_email
+            msg["Subject"] = subject
+            msg.attach(MIMEText(plain_body, "plain"))
+            msg.attach(MIMEText(html_body, "html"))
+
+            server = smtplib.SMTP(SMTP_HOST, int(SMTP_PORT), timeout=10)
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASSWORD)
+            server.sendmail(SMTP_FROM, to_email, msg.as_string())
+            server.quit()
+            logger.info(f"Inactivity warning email sent to {to_email} for {repo_name}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to send warning email: {e}")
+            return False
+    else:
+        print("\n" + "*" * 60)
+        print(f"       MENDCODE INACTIVITY WARNING SIMULATION SERVICE")
+        print(f"   Sent warning to:  {to_email}")
+        print(f"   Repo workspace:   {repo_name}")
+        print(f"   Deletion warning: Deleting in {days_left} days due to inactivity.")
+        print("*" * 60 + "\n")
+        return True

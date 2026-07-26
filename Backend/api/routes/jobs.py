@@ -111,8 +111,50 @@ def format_job_response(job: Job) -> dict:
 
 @router.post("/", response_model=JobResponse)
 async def create_job(payload: JobCreate, background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """
+    Initiate and launch a new agentic PR generation job.
+
+    Performs the following lifecycle steps:
+    1. **Credential Check**: Validates the current user has a linked GitHub OAuth authorization token.
+    2. **Quota Check**: Enforces fixed daily (5 jobs/day) and concurrent (2 active running/pending/approval) quotas.
+    3. **Job DB Registration**: Creates a SQL row mapping the target repo, issue ID, select LLM provider, and active user reference.
+    4. **Background Worker Dispatch**: Initiates the LangGraph state flow asynchronously using FastAPI background tasks to prevent HTTP connection block.
+
+    - **payload**: The target repository details (repo owner, name, target issue number, and LLM option).
+    - **return**: Created job metadata status response.
+    """
     if not current_user.github_token:
         raise HTTPException(status_code=400, detail="GitHub account not connected. Please connect your GitHub account first.")
+
+    # Enforce Daily (5) and Concurrent (2) Quota limits
+    from datetime import datetime
+    now = datetime.utcnow()
+    start_of_today = datetime(now.year, now.month, now.day)
+
+    jobs_today_count = db.query(Job).filter(
+        Job.user_id == current_user.id,
+        Job.created_at >= start_of_today
+    ).count()
+
+    active_jobs_count = db.query(Job).filter(
+        Job.user_id == current_user.id,
+        Job.status.in_(["PENDING", "RUNNING", "AWAITING_APPROVAL"])
+    ).count()
+
+    DAILY_LIMIT = 5
+    CONCURRENT_LIMIT = 2
+
+    if active_jobs_count >= CONCURRENT_LIMIT:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Quota exceeded: You have {active_jobs_count} active job(s) running. (Maximum concurrent limit: {CONCURRENT_LIMIT})"
+        )
+
+    if jobs_today_count >= DAILY_LIMIT:
+        raise HTTPException(
+            status_code=429,
+            detail=f"Quota exceeded: You have created {jobs_today_count} job(s) today. (Maximum daily limit: {DAILY_LIMIT})"
+        )
 
     db_job = Job(**payload.model_dump(), user_id=current_user.id)
     db.add(db_job)
@@ -124,6 +166,16 @@ async def create_job(payload: JobCreate, background_tasks: BackgroundTasks, curr
 
 @router.post("/{job_id}/approve", response_model=JobResponse)
 async def approve_job(job_id: str, background_tasks: BackgroundTasks, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """
+    Approve generated codebase modifications and resume execution.
+
+    Resumes the LangGraph thread from its current checkpoint (`apply_file_change` interrupt).
+    Decrypts the GitHub token and fires the background pipeline thread to apply updates to disk
+    and submit the final GitHub Pull Request.
+
+    - **job_id**: Unique UUID matching the target PR job.
+    - **return**: Refreshed job response indicating execution has resumed.
+    """
     job = db.query(Job).filter(Job.id == job_id, Job.user_id == current_user.id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -136,6 +188,16 @@ async def approve_job(job_id: str, background_tasks: BackgroundTasks, current_us
 
 @router.get("/{job_id}", response_model=JobResponse)
 async def get_job(job_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """
+    Fetch the execution details of a specific job by ID.
+
+    Queries the relational database for job parameters including active steps, terminal console logs,
+    acceptance criteria breakdown, issue analysis, and proposed diff lists.
+    Admins are permitted to access any job, while standard users are restricted to their own jobs.
+
+    - **job_id**: Unique UUID matching the target job.
+    - **return**: Formatted job details.
+    """
     if current_user.role == "admin":
         job = db.query(Job).filter(Job.id == job_id).first()
     else:
@@ -148,6 +210,15 @@ async def get_job(job_id: str, current_user: User = Depends(get_current_user), d
 
 @router.get("/", response_model=List[JobResponse])
 async def list_jobs(skip: int = 0, limit: int = 10, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """
+    Query historical list of jobs.
+
+    Fetches user-owned or global (if admin) jobs. Employs offset pagination.
+
+    - **skip**: Number of job records to skip (offset).
+    - **limit**: Maximum number of job records to return.
+    - **return**: List of matching jobs.
+    """
     if current_user.role == "admin":
         jobs = db.query(Job).offset(skip).limit(limit).all()
     else:
@@ -162,6 +233,19 @@ async def update_job_changes(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
+    """
+    Surgically edit a specific proposed file modification before final approval.
+
+    This endpoint permits users to edit the LLM-generated code replacements in the UI:
+    1. Locates the target file path in the job's `approved_changes` list.
+    2. Overwrites the `updated_content` attribute with the user's customized modifications.
+    3. Saves changes back to the SQL database.
+    4. Syncs the updated list with the LangGraph state checkpoints table to ensure the resumed execution picks up the user's manual adjustments.
+
+    - **job_id**: Unique UUID matching the target job.
+    - **payload**: The target file path and the updated content body.
+    - **return**: Updated job response metadata.
+    """
     job = db.query(Job).filter(Job.id == job_id, Job.user_id == current_user.id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -202,18 +286,59 @@ async def update_job_changes(
     return format_job_response(job)
 
 # Workspace File Explorer Helper and Endpoints
-def get_safe_workspace_path(job_id: str, relative_path: str) -> Path:
-    # Isolate workspace per job
-    job_dir = Path("workspace/repos") / job_id
-    if not job_dir.exists():
-        raise HTTPException(status_code=404, detail="Workspace directory not found")
-    
-    # Find the repository subfolder (there should be exactly one folder cloned under job_id)
-    subdirs = [d for d in job_dir.iterdir() if d.is_dir() and d.name != ".git"]
-    if not subdirs:
-        raise HTTPException(status_code=404, detail="Workspace repository not found")
+BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
+WORKSPACE_DIR = BACKEND_DIR / "workspace" / "repos"
+
+def ensure_workspace_cloned(job: Job, db: Session) -> Path:
+    """
+    Ensure the workspace directory exists on disk.
+    If it is missing (due to server sleeping, restarts, or disk resets),
+    it dynamically re-clones the repository and re-applies all approved
+    proposed patches from Job.approved_changes.
+    """
+    job_dir = WORKSPACE_DIR / job.id
+    repo_path = job_dir / job.repo_name
+
+    if not job_dir.exists() or not repo_path.exists():
+        # Get user
+        user = db.query(User).filter(User.id == job.user_id).first()
+        if not user or not user.github_token:
+            return repo_path  # Cannot restore without token, return path to fail safely downstream
+            
+        token = decrypt_token(user.github_token)
         
-    repo_base = subdirs[0].resolve()
+        from tools.repository.clone import clone_repository
+        try:
+            clone_repository(
+                job_id=job.id,
+                owner=job.repo_owner,
+                repo=job.repo_name,
+                token=token
+            )
+            
+            # Re-apply any approved modifications
+            if job.approved_changes:
+                changes = json.loads(job.approved_changes)
+                for change in changes:
+                    file_path = change.get("file_path")
+                    updated_content = change.get("updated_content")
+                    if file_path and updated_content:
+                        target_file_path = repo_path / file_path
+                        target_file_path.parent.mkdir(parents=True, exist_ok=True)
+                        with open(target_file_path, "w", encoding="utf-8") as f:
+                            f.write(updated_content)
+        except Exception as e:
+            print(f"Error self-healing/restoring workspace: {e}")
+            
+    return repo_path
+
+def get_safe_workspace_path(repo_base: Path, relative_path: str) -> Path:
+    """
+    Resolve and validate workspace file paths.
+
+    Prevents directory traversal security attacks (e.g., using '../../etc/passwd')
+    by checking that the resolved target path resides within the job's sandboxed cloned repository.
+    """
     target_path = (repo_base / relative_path).resolve()
     
     # Enforce path traversal block
@@ -224,20 +349,23 @@ def get_safe_workspace_path(job_id: str, relative_path: str) -> Path:
 
 @router.get("/{job_id}/workspace/tree")
 async def get_workspace_tree(job_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """
+    List the files and directories inside the job's cloned workspace repository.
+
+    Reads the directory recursively. Ignores standard dependencies and meta directories (e.g. `.git`, `node_modules`, `.venv`)
+    to deliver a clean tree structure for the code editor sidebar.
+
+    - **job_id**: Unique UUID matching the target job.
+    - **return**: Flat list of file and directory objects with path and directory flags.
+    """
     job = db.query(Job).filter(Job.id == job_id, Job.user_id == current_user.id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
         
-    job_dir = Path("workspace/repos") / job_id
-    if not job_dir.exists():
+    repo_base = ensure_workspace_cloned(job, db)
+    if not repo_base.exists():
         return []
         
-    subdirs = [d for d in job_dir.iterdir() if d.is_dir() and d.name != ".git"]
-    if not subdirs:
-        return []
-        
-    repo_base = subdirs[0].resolve()
-    
     file_list = []
     ignore_patterns = {".git", "node_modules", ".venv", "__pycache__", "dist", "build", ".venv-test"}
     
@@ -266,11 +394,22 @@ async def get_workspace_tree(job_id: str, current_user: User = Depends(get_curre
 
 @router.get("/{job_id}/workspace/file")
 async def get_workspace_file(job_id: str, path: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """
+    Read the content of a file inside the cloned workspace repository.
+
+    Performs safe path resolution. Rejects queries targeting binary file content
+    to prevent encoding exceptions.
+
+    - **job_id**: Unique UUID matching the target job.
+    - **path**: Relative file path to query.
+    - **return**: Stringified file content.
+    """
     job = db.query(Job).filter(Job.id == job_id, Job.user_id == current_user.id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
         
-    target_path = get_safe_workspace_path(job_id, path)
+    repo_base = ensure_workspace_cloned(job, db)
+    target_path = get_safe_workspace_path(repo_base, path)
     if not target_path.exists() or not target_path.is_file():
         raise HTTPException(status_code=404, detail="File not found")
         
@@ -286,17 +425,100 @@ async def get_workspace_file(job_id: str, path: str, current_user: User = Depend
 
 @router.put("/{job_id}/workspace/file")
 async def update_workspace_file(job_id: str, payload: ChangeUpdateRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """
+    Overwite or save updates directly to a file in the workspace repository.
+
+    Permits raw manual file modifications on files in the workspace. Creates parent directories dynamically if necessary.
+    Synchronizes the edits back to Job.approved_changes and the LangGraph thread checkpointer state
+    to prevent file edits from being lost during server sleep resets.
+    """
     job = db.query(Job).filter(Job.id == job_id, Job.user_id == current_user.id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
         
-    target_path = get_safe_workspace_path(job_id, payload.file_path)
+    repo_base = ensure_workspace_cloned(job, db)
+    target_path = get_safe_workspace_path(repo_base, payload.file_path)
+    
+    # 1. Read original content from disk before overwriting if not already tracked
+    original_content = ""
     try:
-        # Create parent directories if they don't exist
+        if target_path.exists() and target_path.is_file():
+            with open(target_path, "r", encoding="utf-8") as f:
+                original_content = f.read()
+    except Exception:
+        pass
+
+    # 2. Write the new content to disk
+    try:
         target_path.parent.mkdir(parents=True, exist_ok=True)
         with open(target_path, "w", encoding="utf-8") as f:
             f.write(payload.updated_content)
-        return {"status": "success"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error writing file: {str(e)}")
+
+    # 3. Synchronize with Job.approved_changes in the relational database
+    try:
+        changes = json.loads(job.approved_changes) if job.approved_changes else []
+    except (json.JSONDecodeError, TypeError):
+        changes = []
+
+    # Check if this file is already tracked in proposed modifications
+    found = False
+    for change in changes:
+        if change.get("file_path") == payload.file_path:
+            change["updated_content"] = payload.updated_content
+            # Keep original content if already tracked, otherwise use what we read
+            if "original_content" not in change:
+                change["original_content"] = original_content
+            found = True
+            break
+
+    if not found:
+        # Create a new modification entry
+        changes.append({
+            "file_path": payload.file_path,
+            "objective": "Manual workspace editor patches",
+            "original_content": original_content,
+            "updated_content": payload.updated_content,
+            "change_summary": f"Manual developer patch to {payload.file_path}"
+        })
+
+    job.approved_changes = json.dumps(changes)
+    db.commit()
+    db.refresh(job)
+
+    # 4. Sync with LangGraph checkpoint database (checkpoints.db / Postgres Saver)
+    try:
+        app = create_graph()
+        config = {"configurable": {"thread_id": job_id}}
+        app.update_state(config, {"approved_changes": changes})
+    except Exception as e:
+        # If checkpoint database is empty or thread is not yet active, pass
+        pass
+
+    return {"status": "success"}
+
+@router.delete("/{job_id}")
+async def delete_job(job_id: str, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """
+    Cancel and permanently delete a job.
+
+    Deletes the database record, frees up active concurrency quota,
+    and cleans up all local repository workspace files on disk.
+    """
+    job = db.query(Job).filter(Job.id == job_id, Job.user_id == current_user.id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    # Clean up workspace files on disk
+    job_dir = WORKSPACE_DIR / job_id
+    if job_dir.exists():
+        import shutil
+        shutil.rmtree(job_dir, ignore_errors=True)
+
+    # Delete database row reference
+    db.delete(job)
+    db.commit()
+
+    return {"status": "success", "message": f"Job {job_id} successfully deleted."}
 

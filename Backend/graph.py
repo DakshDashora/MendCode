@@ -22,6 +22,14 @@ from nodes.create_pr import create_pr_node
 MAX_RETRIES = 3
 
 def review_router(state: IssueState):
+    """
+    Direct the loop routing based on individual code review results.
+
+    - **next_target**: Triggered if the current file modification is approved, and there are more targets in the modification spec queue. Loops to next index.
+    - **validate**: Triggered if the current file modification is approved, and all targets are completed. Advances to full AST validation.
+    - **retry**: Triggered if the code review fails (e.g. anti-lobotomy check or syntax warning), and retry count is under maximum limit (3). Loops back to generate_file_change.
+    - **failed**: Triggered if code review fails and retries are exhausted. Terminates the pipeline.
+    """
     if state.review_approved:
         # If there are more targets to process
         if state.current_target_index + 1 < len(state.modification_targets):
@@ -35,6 +43,13 @@ def review_router(state: IssueState):
             return "failed"
 
 def validation_router(state: IssueState):
+    """
+    Direct routing based on AST syntax and logical codebase dry-run validations.
+
+    - **apply**: Triggered if both AST check and holistic LLM dry-runs pass. Advances to the write-to-disk node (apply_file_change).
+    - **fix_validation**: Triggered if validation fails, and validation retry count is under limit (3). Loops back to regenerate all target code files with feedback.
+    - **failed**: Triggered if validation fails and retries are exhausted. Terminates execution.
+    """
     if state.validation_passed:
         return "apply"
     else:
@@ -44,22 +59,37 @@ def validation_router(state: IssueState):
             return "failed"
 
 def planning_router(state: IssueState):
+    """
+    Verify a valid modification blueprint is constructed.
+
+    - **continue**: Proceed to code edit generation if modification targets list is populated.
+    - **failed**: Stop execution if no valid edit targets could be identified.
+    """
     if not state.modification_targets:
         print("Error: No valid modification targets identified. Stopping.")
         return "failed"
     return "continue"
 
 def increment_target_node(state: IssueState):
+    """
+    System step node that increments current target file index and resets retry trackers.
+    """
     state.current_target_index += 1
     state.retry_count = 0
     state.review_feedback = []
     return state
 
 def increment_retry_node(state: IssueState):
+    """
+    System step node that tracks current retry count for reviews.
+    """
     state.retry_count += 1
     return state
 
 def prepare_validation_retry_node(state: IssueState):
+    """
+    System node preparing state parameters for a complete validation regeneration attempt.
+    """
     state.validation_retry_count += 1
     state.current_target_index = 0 # Restart generation from first file with new holistic feedback
     state.retry_count = 0
@@ -69,6 +99,13 @@ def prepare_validation_retry_node(state: IssueState):
     return state
 
 def create_graph():
+    """
+    Construct, wire, and compile the MendCode LangGraph StateGraph pipeline workflow.
+
+    Defines the complete list of LLM and System execution nodes, binds static and
+    conditional edge transition maps, initializes thread savers (SQLite or Postgres checkpointers
+    for memory saving), and configures the human-in-the-loop pause interrupt before `apply_file_change`.
+    """
     workflow = StateGraph(IssueState)
 
     # Add Nodes
